@@ -1,0 +1,32 @@
+{
+  "name": "editor-videos-mama",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Editor de vídeos para Instagram con Claude + Remotion",
+  "scripts": {
+    "studio": "remotion studio",
+    "procesar": "tsx scripts/procesar.ts",
+    "local": "tsx scripts/local.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.131.0",
+    "@remotion/bundler": "4.0.530",
+    "@remotion/captions": "4.0.530",
+    "@remotion/cli": "4.0.530",
+    "@remotion/google-fonts": "4.0.530",
+    "@remotion/install-whisper-cpp": "4.0.530",
+    "@remotion/renderer": "4.0.530",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.530",
+    "tsx": "4.23.15",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.3",
+    "@types/react": "19.2.7",
+    "typescript": "5.9.3"
+  }
+}

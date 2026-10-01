@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Mis vídeos para Instagram</title>
+    <meta name="theme-color" content="#d6336c" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icono.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="estilos.css" />
+  </head>
+  <body>
+    <header class="cabecera">
+      <h1>🎬 Mis vídeos para Instagram</h1>
+    </header>
+
+    <main>
+      <!-- Sin clave: hay que abrir el enlace bueno -->
+      <section id="pantalla-clave" class="tarjeta" hidden>
+        <h2>Hola 👋</h2>
+        <p>
+          Para entrar, abre el <strong>enlace que te han enviado</strong>. Si tienes la clave, también
+          puedes escribirla aquí:
+        </p>
+        <form id="form-clave" class="fila">
+          <input id="campo-clave" type="text" autocomplete="off" placeholder="Clave" aria-label="Clave" />
+          <button class="boton boton-principal" type="submit">Entrar</button>
+        </form>
+        <p id="error-clave" class="aviso-error" hidden></p>
+      </section>
+
+      <div id="pantalla-app" hidden>
+        <!-- Nuevo vídeo -->
+        <section class="tarjeta" aria-labelledby="titulo-nuevo">
+          <h2 id="titulo-nuevo">Nuevo vídeo</h2>
+
+          <div class="paso">
+            <span class="numero">1</span>
+            <div class="paso-cuerpo">
+              <p class="paso-titulo">Elige el vídeo</p>
+              <label class="boton boton-grande boton-secundario" for="campo-videos">
+                📁 Elegir vídeo
+              </label>
+              <input id="campo-videos" type="file" accept="video/*" multiple hidden />
+              <ul id="lista-elegidos" class="elegidos"></ul>
+              <p class="pista">Puedes elegir varios si quieres que los una.</p>
+            </div>
+          </div>
+
+          <div class="paso">
+            <span class="numero">2</span>
+            <div class="paso-cuerpo">
+              <label class="paso-titulo" for="campo-instrucciones">¿Qué quieres que haga?</label>
+              <textarea
+                id="campo-instrucciones"
+                rows="4"
+                placeholder="Por ejemplo: quita los primeros segundos, pon subtítulos y un título que diga «Bizcocho de limón»"
+              ></textarea>
+              <button id="boton-dictar" class="boton boton-secundario" type="button" hidden>
+                🎤 Dictar
+              </button>
+              <p class="pista">O toca una idea para añadirla:</p>
+              <div class="ideas" id="ideas"></div>
+            </div>
+          </div>
+
+          <button id="boton-editar" class="boton boton-grande boton-principal" type="button" disabled>
+            ✨ Editar mi vídeo
+          </button>
+          <div id="subida" class="subida" hidden>
+            <p id="subida-texto">Subiendo vídeo…</p>
+            <div class="barra"><div id="subida-barra"></div></div>
+          </div>
+          <p id="error-nuevo" class="aviso-error" hidden></p>
+        </section>
+
+        <!-- Lista de vídeos -->
+        <section aria-labelledby="titulo-lista">
+          <h2 id="titulo-lista" class="titulo-seccion">Mis vídeos</h2>
+          <p class="pista">
+            Cada vídeo tarda unos 5–10 minutos. Puedes cerrar esta página: cuando vuelvas, estará aquí.
+          </p>
+          <div id="lista-trabajos"></div>
+        </section>
+
+        <details class="tarjeta ayuda">
+          <summary>❓ ¿Cómo lo subo a Instagram?</summary>
+          <ol>
+            <li>Cuando ponga <strong>¡Listo!</strong>, pulsa <strong>📲 Guardar en el móvil</strong>.</li>
+            <li>En el móvil, elige <strong>Guardar vídeo</strong> (o directamente <strong>Instagram</strong>).</li>
+            <li>
+              Pulsa <strong>📋 Copiar texto</strong> y pégalo como descripción al publicar.
+            </li>
+            <li>La música ponla desde Instagram: allí tienes canciones que se pueden usar.</li>
+          </ol>
+          <p>Si estás en el ordenador, el botón descarga el vídeo a la carpeta de Descargas.</p>
+        </details>
+      </div>
+    </main>
+
+    <template id="plantilla-trabajo">
+      <article class="tarjeta trabajo">
+        <div class="trabajo-cabecera">
+          <span class="estado-icono" aria-hidden="true"></span>
+          <div>
+            <p class="estado-texto"></p>
+            <p class="trabajo-meta"></p>
+          </div>
+        </div>
+        <div class="barra" hidden><div></div></div>
+        <p class="instrucciones"></p>
+        <p class="resumen" hidden></p>
+        <div class="video-hueco" hidden></div>
+        <div class="texto-instagram" hidden>
+          <p class="etiqueta">Texto para Instagram:</p>
+          <p class="texto"></p>
+        </div>
+        <div class="acciones"></div>
+        <div class="cambios" hidden>
+          <label>¿Qué cambio quieres?</label>
+          <textarea rows="3" placeholder="Por ejemplo: hazlo más corto y pon el título más grande"></textarea>
+          <button class="boton boton-principal" type="button">✨ Hacer cambios</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

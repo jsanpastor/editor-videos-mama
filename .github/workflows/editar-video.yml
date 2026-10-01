@@ -1,0 +1,53 @@
+name: Editar vídeo
+
+# Lo lanza Apps Script cuando mamá pulsa "Editar mi vídeo".
+# También se puede lanzar a mano desde la pestaña Actions con el id del trabajo.
+on:
+  repository_dispatch:
+    types: [editar-video]
+  workflow_dispatch:
+    inputs:
+      id:
+        description: Id del trabajo
+        required: true
+
+run-name: Editar vídeo ${{ github.event.client_payload.id || inputs.id }}
+
+permissions:
+  contents: read
+
+jobs:
+  editar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Instalar ffmpeg y fuentes de emojis
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-noto-color-emoji > /dev/null
+
+      - name: Caché de whisper (transcripción)
+        uses: actions/cache@v4
+        with:
+          path: .whisper
+          key: whisper-1.7.6-small-${{ runner.os }}
+
+      - run: npm ci
+
+      - name: Preparar Chrome para Remotion
+        run: npx remotion browser ensure
+
+      - name: Editar el vídeo
+        run: npm run procesar
+        env:
+          TRABAJO_ID: ${{ github.event.client_payload.id || inputs.id }}
+          APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
+          SECRETO_SERVIDOR: ${{ secrets.SECRETO_SERVIDOR }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

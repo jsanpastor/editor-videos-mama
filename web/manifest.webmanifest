@@ -1,0 +1,9 @@
+{
+  "name": "Mis vídeos para Instagram",
+  "short_name": "Mis vídeos",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#fff7f2",
+  "theme_color": "#d6336c",
+  "icons": [{ "src": "icono.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
