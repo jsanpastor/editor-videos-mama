@@ -73,7 +73,7 @@ git push -u origin main
    - Google pedirá permisos. Saldrá *"Google no ha verificado esta aplicación"*: es normal,
      es tu propio script → *Configuración avanzada* → *Ir a Editor de vídeos de mamá* →
      *Permitir*.
-   - En el registro de ejecución aparecerán la **CLAVE** y el **SECRETO**. Cópialos.
+   - En el registro de ejecución aparecerá la **CLAVE** (va en el enlace de tu madre).
 6. **Implementar** → **Nueva implementación** → tipo ⚙️ **Aplicación web**:
    - *Ejecutar como*: **Yo**
    - *Quién tiene acceso*: **Cualquier usuario**
@@ -82,21 +82,18 @@ git push -u origin main
 > Si algún día cambias `Code.gs`: *Implementar* → *Gestionar implementaciones* → ✏️ →
 > *Versión: nueva versión* → *Implementar*. Así la URL no cambia.
 
-## Paso 4 · Secretos en GitHub
+## Paso 4 · Tu API key de Anthropic en GitHub
 
 En el repositorio → *Settings* → *Secrets and variables* → *Actions* → **New repository
-secret**, crea estos tres:
+secret**: nombre `ANTHROPIC_API_KEY`, valor tu API key (`sk-ant-...`).
 
-| Nombre | Valor |
-|---|---|
-| `ANTHROPIC_API_KEY` | tu API key de Anthropic (`sk-ant-...`) |
-| `APPS_SCRIPT_URL` | la URL `/exec` del paso 3.6 |
-| `SECRETO_SERVIDOR` | el SECRETO del paso 3.5 |
+No hace falta ningún otro secreto: para cada vídeo, Apps Script genera una llave de un solo
+uso que GitHub Actions lee del aviso sin que aparezca en los logs públicos.
 
 ## Paso 5 · Publicar la web
 
 1. Edita [`web/config.js`](web/config.js) y pon la URL `/exec` del paso 3.6 en
-   `APPS_SCRIPT_URL`. Haz commit y push.
+   `APPS_SCRIPT_URL`. Haz commit y push (el editor también lee la URL de ahí).
 2. En el repositorio → *Settings* → *Pages* → *Source*: **GitHub Actions**.
 3. En la pestaña *Actions*, ejecuta **Publicar web** (o espera a que se lance con el push).
 

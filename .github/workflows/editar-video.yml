@@ -1,17 +1,12 @@
 name: Editar vídeo
 
-# Lo lanza Apps Script cuando mamá pulsa "Editar mi vídeo".
-# También se puede lanzar a mano desde la pestaña Actions con el id del trabajo.
+# Lo lanza Apps Script cuando mamá pulsa "Editar mi vídeo". Para repetir un
+# vídeo, usa el botón "Reintentar" de la web (genera una llave nueva).
 on:
   repository_dispatch:
     types: [editar-video]
-  workflow_dispatch:
-    inputs:
-      id:
-        description: Id del trabajo
-        required: true
 
-run-name: Editar vídeo ${{ github.event.client_payload.id || inputs.id }}
+run-name: Editar vídeo ${{ github.event.client_payload.id }}
 
 permissions:
   contents: read
@@ -47,7 +42,4 @@ jobs:
       - name: Editar el vídeo
         run: npm run procesar
         env:
-          TRABAJO_ID: ${{ github.event.client_payload.id || inputs.id }}
-          APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
-          SECRETO_SERVIDOR: ${{ secrets.SECRETO_SERVIDOR }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

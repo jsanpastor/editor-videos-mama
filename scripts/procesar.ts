@@ -1,5 +1,8 @@
 // Lo ejecuta GitHub Actions cuando mamá pulsa "Editar mi vídeo".
-// Variables de entorno: TRABAJO_ID, APPS_SCRIPT_URL, SECRETO_SERVIDOR, ANTHROPIC_API_KEY
+// El id del trabajo y su llave de un solo uso llegan en el aviso de Apps Script
+// (repository_dispatch). Se leen del archivo del evento para que no salgan en los
+// logs públicos. Para pruebas: variables TRABAJO_ID y LLAVE_TRABAJO.
+// La dirección de Apps Script se toma de web/config.js (o de APPS_SCRIPT_URL).
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -7,15 +10,20 @@ import { pipeline as streamPipeline } from "node:stream/promises";
 import type { Plan } from "../src/plan";
 import { ejecutarPipeline, type Etapa } from "./pipeline";
 
-const requerida = (k: string) => {
-  const v = process.env[k];
-  if (!v) throw new Error(`Falta la variable de entorno ${k}`);
-  return v;
-};
-
-const ID = requerida("TRABAJO_ID");
-const URL_SCRIPT = requerida("APPS_SCRIPT_URL");
-const SECRETO = requerida("SECRETO_SERVIDOR");
+const evento = process.env.GITHUB_EVENT_PATH
+  ? (JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, "utf8")) as {
+      client_payload?: { id?: string; llave?: string };
+    })
+  : {};
+const ID = evento.client_payload?.id ?? process.env.TRABAJO_ID;
+const LLAVE = evento.client_payload?.llave ?? process.env.LLAVE_TRABAJO;
+const URL_SCRIPT =
+  process.env.APPS_SCRIPT_URL ??
+  fs
+    .readFileSync(path.resolve(import.meta.dirname, "..", "web", "config.js"), "utf8")
+    .match(/APPS_SCRIPT_URL:\s*"([^"]+)"/)?.[1];
+if (!ID || !LLAVE) throw new Error("Falta el id del trabajo o su llave");
+if (!URL_SCRIPT?.startsWith("https://")) throw new Error("Falta la URL de Apps Script en web/config.js");
 
 type Trabajo = {
   id: string;
@@ -26,7 +34,7 @@ type Trabajo = {
 const appsScript = async <T>(accion: string, datos: object): Promise<T> => {
   const r = await fetch(URL_SCRIPT, {
     method: "POST",
-    body: JSON.stringify({ accion, secreto: SECRETO, ...datos }),
+    body: JSON.stringify({ accion, id: ID, llave: LLAVE, ...datos }),
     redirect: "follow",
   });
   const json = (await r.json()) as { ok: boolean; error?: string } & T;

@@ -18,7 +18,6 @@ var MAX_TRABAJOS = 40;
 function configurar() {
   var p = PropertiesService.getScriptProperties();
   if (!p.getProperty('CLAVE')) p.setProperty('CLAVE', aleatorio_(24));
-  if (!p.getProperty('SECRETO')) p.setProperty('SECRETO', aleatorio_(40));
   if (!p.getProperty('CARPETA_RAIZ')) {
     var raiz = crearCarpeta_('Editor de vídeos de mamá', null);
     p.setProperty('CARPETA_RAIZ', raiz);
@@ -29,7 +28,6 @@ function configurar() {
     return !p.getProperty(k);
   });
   Logger.log('CLAVE (va en el enlace de mamá): ' + p.getProperty('CLAVE'));
-  Logger.log('SECRETO (secreto SECRETO_SERVIDOR en GitHub): ' + p.getProperty('SECRETO'));
   Logger.log('Carpeta en Drive: https://drive.google.com/drive/folders/' + p.getProperty('CARPETA_RAIZ'));
   Logger.log(faltan.length ? 'FALTAN propiedades: ' + faltan.join(', ') : 'GitHub configurado ✔');
 }
@@ -46,7 +44,8 @@ function doPost(e) {
     var datos = JSON.parse(e.postData.contents);
     var accion = datos.accion;
     if (accion.indexOf('servidor:') === 0) {
-      comprobarSecreto_(datos.secreto);
+      if (!ACCIONES_SERVIDOR[accion]) throw new Error('Acción desconocida');
+      comprobarLlave_(datos.id, datos.llave);
       return json_(ACCIONES_SERVIDOR[accion](datos));
     }
     comprobarClave_(datos.clave);
@@ -77,6 +76,7 @@ var ACCIONES = {
     });
     lista.forEach(function (t) {
       delete t.plan; // la web no lo necesita
+      delete t.llave;
     });
     return { ok: true, trabajos: lista };
   },
@@ -95,9 +95,9 @@ var ACCIONES = {
       estado: 'en_cola',
       progreso: null,
     };
-    guardarTrabajo_(trabajo);
-    avisarGitHub_(trabajo.id);
+    avisarGitHub_(trabajo);
     limpiarAntiguos_();
+    delete trabajo.llave;
     return { ok: true, trabajo: trabajo };
   },
 
@@ -108,8 +108,7 @@ var ACCIONES = {
     t.error = null;
     t.progreso = null;
     t.actualizado = Date.now();
-    guardarTrabajo_(t);
-    avisarGitHub_(t.id);
+    avisarGitHub_(t);
     return { ok: true };
   },
 
@@ -147,6 +146,8 @@ var ACCIONES_SERVIDOR = {
         if (d.campos && d.campos.hasOwnProperty(k)) t[k] = d.campos[k];
       });
       t.actualizado = Date.now();
+      // Trabajo terminado: la llave ya no sirve para nada más
+      if (t.estado === 'listo' || t.estado === 'error') delete t.llave;
       guardarTrabajo_(t);
       return { ok: true };
     } finally {
@@ -186,8 +187,11 @@ function comprobarClave_(clave) {
   }
 }
 
-function comprobarSecreto_(secreto) {
-  if (!secreto || secreto !== prop_('SECRETO')) throw new Error('Secreto incorrecto');
+// GitHub Actions demuestra que trabaja para un vídeo concreto con la llave de
+// un solo uso que le mandamos al avisarle (no queda en ningún log público).
+function comprobarLlave_(id, llave) {
+  var t = id ? leerTrabajo_(id) : null;
+  if (!t || !t.llave || !llave || llave !== t.llave) throw new Error('Llave incorrecta');
 }
 
 function leerTrabajo_(id) {
@@ -238,7 +242,9 @@ function marcarAtascado_(t) {
   return t;
 }
 
-function avisarGitHub_(id) {
+function avisarGitHub_(t) {
+  t.llave = aleatorio_(40);
+  guardarTrabajo_(t);
   var r = UrlFetchApp.fetch('https://api.github.com/repos/' + prop_('GITHUB_REPO') + '/dispatches', {
     method: 'post',
     contentType: 'application/json',
@@ -246,7 +252,7 @@ function avisarGitHub_(id) {
       Authorization: 'Bearer ' + prop_('GITHUB_TOKEN'),
       Accept: 'application/vnd.github+json',
     },
-    payload: JSON.stringify({ event_type: 'editar-video', client_payload: { id: id } }),
+    payload: JSON.stringify({ event_type: 'editar-video', client_payload: { id: t.id, llave: t.llave } }),
     muteHttpExceptions: true,
   });
   if (r.getResponseCode() >= 300) {
