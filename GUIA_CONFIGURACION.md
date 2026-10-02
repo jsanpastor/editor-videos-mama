@@ -120,7 +120,7 @@ https://TU_USUARIO.github.io/editor-videos-mama/#clave=LA_CLAVE_DEL_PASO_3
   ordenador; las siguientes veces le vale con abrir la página.
 - En el móvil, que lo añada a la pantalla de inicio (Safari: *Compartir → Añadir a
   pantalla de inicio*; Chrome: ⋮ → *Añadir a pantalla de inicio*). Así parece una app.
-- **No publiques la clave**: quien la tenga puede editar vídeos con tu saldo de Anthropic.
+- **No publiques la clave**: quien la tenga puede editar vídeos gastando de tu plan de Claude.
   Si se filtra, borra la propiedad `CLAVE` en Apps Script, ejecuta `configurar` otra vez y
   manda el enlace nuevo.
 
