@@ -70,6 +70,29 @@
             </div>
           </div>
 
+          <div class="paso">
+            <span class="numero">3</span>
+            <div class="paso-cuerpo">
+              <p class="paso-titulo">Voz en off <span class="opcional">(si quieres)</span></p>
+              <p class="pista sin-margen-arriba">Graba tu voz contando algo y la pondremos encima de los vídeos.</p>
+              <div id="voz-vacia" class="fila-botones">
+                <button id="boton-grabar" class="boton boton-secundario" type="button">🎙️ Grabar mi voz</button>
+                <label class="boton boton-terciario" for="campo-voz">📎 Elegir un audio</label>
+                <input id="campo-voz" type="file" accept="audio/*" hidden />
+              </div>
+              <div id="voz-grabando" class="grabando" hidden>
+                <span class="punto-rojo" aria-hidden="true"></span>
+                <span>Grabando… <strong id="voz-tiempo">0:00</strong></span>
+                <button id="boton-parar" class="boton boton-principal" type="button">⏹️ Parar</button>
+              </div>
+              <div id="voz-lista" hidden>
+                <audio id="voz-audio" controls></audio>
+                <button id="boton-borrar-voz" class="boton boton-peligro" type="button">🗑️ Quitar la voz</button>
+              </div>
+              <p id="error-voz" class="aviso-error" hidden></p>
+            </div>
+          </div>
+
           <button id="boton-editar" class="boton boton-grande boton-principal" type="button" disabled>
             ✨ Editar mi vídeo
           </button>
@@ -115,17 +138,27 @@
         </div>
         <div class="barra" hidden><div></div></div>
         <p class="instrucciones"></p>
+        <p class="lleva-voz" hidden>🎙️ Con voz en off</p>
         <p class="resumen" hidden></p>
         <div class="video-hueco" hidden></div>
+        <div class="ubicacion" hidden>
+          <p class="etiqueta">📍 Dónde está tu vídeo:</p>
+          <p class="ruta"></p>
+          <div class="fila-botones">
+            <button class="boton boton-secundario copiar-enlace" type="button">🔗 Copiar enlace</button>
+            <a class="boton boton-terciario abrir-enlace" target="_blank" rel="noopener">📂 Abrir en Drive</a>
+          </div>
+        </div>
         <div class="texto-instagram" hidden>
           <p class="etiqueta">Texto para Instagram:</p>
           <p class="texto"></p>
         </div>
         <div class="acciones"></div>
         <div class="cambios" hidden>
-          <label>¿Qué cambio quieres?</label>
-          <textarea rows="3" placeholder="Por ejemplo: hazlo más corto y pon el título más grande"></textarea>
-          <button class="boton boton-principal" type="button">✨ Hacer cambios</button>
+          <label>✏️ ¿Quieres cambiar algo?</label>
+          <textarea rows="3" placeholder="Por ejemplo: hazlo más corto, pon el título más grande y más efectos de sonido"></textarea>
+          <div class="ideas ideas-cambios"></div>
+          <button class="boton boton-principal" type="button">✨ Hacer los cambios</button>
         </div>
       </article>
     </template>

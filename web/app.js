@@ -4,13 +4,27 @@ const URL_API = window.CONFIG && window.CONFIG.APPS_SCRIPT_URL;
 const MODO_DEMO = URL_API === "DEMO" || new URLSearchParams(location.search).has("demo");
 
 const IDEAS = [
+  "Haz un reel mezclando los clips con transiciones y efectos de sonido",
+  "Es para una historia de Instagram",
+  "Que dure menos de 20 segundos",
   "Pon subtítulos",
-  "Quita los primeros segundos",
-  "Pon un título bonito al principio",
-  "Que dure menos de 30 segundos",
+  "Quita los silencios cuando hablo",
+  "Pon un título al principio con letra neón",
+  "Ritmo rápido y con energía",
   "Ponle un filtro cálido",
-  "Quita el sonido",
   "Pon «Sígueme para más» al final",
+];
+
+const IDEAS_CAMBIOS = [
+  "Más corto",
+  "Más rápido",
+  "Más efectos de sonido",
+  "Sin efectos de sonido",
+  "Letras más grandes",
+  "Cambia la letra",
+  "Quita los subtítulos",
+  "Cambia el orden de los clips",
+  "Otro filtro",
 ];
 
 const ESTADOS = {
@@ -273,6 +287,82 @@ if (Reconocimiento) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Voz en off: grabarla aquí mismo con el micrófono o elegir un audio
+// ---------------------------------------------------------------------------
+let vozArchivo = null;
+let grabadora = null;
+
+function mostrarVoz() {
+  $("voz-vacia").hidden = !!vozArchivo || !!grabadora;
+  $("voz-grabando").hidden = !grabadora;
+  $("voz-lista").hidden = !vozArchivo;
+  if (vozArchivo) $("voz-audio").src = URL.createObjectURL(vozArchivo);
+}
+
+function tipoGrabacion() {
+  // Safari (iPhone) graba en mp4/aac; Chrome y Android en webm/opus
+  for (const tipo of ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg"]) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(tipo)) return tipo;
+  }
+  return "";
+}
+
+if (!window.MediaRecorder || !navigator.mediaDevices) $("boton-grabar").hidden = true;
+
+$("boton-grabar").addEventListener("click", async () => {
+  $("error-voz").hidden = true;
+  let flujo;
+  try {
+    flujo = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+  } catch {
+    $("error-voz").textContent =
+      "No puedo usar el micrófono. Cuando el móvil pregunte, pulsa «Permitir» para que la página pueda grabar tu voz.";
+    $("error-voz").hidden = false;
+    return;
+  }
+  const tipo = tipoGrabacion();
+  const trozos = [];
+  const rec = new MediaRecorder(flujo, tipo ? { mimeType: tipo } : undefined);
+  const inicio = Date.now();
+  const reloj = setInterval(() => {
+    const seg = Math.floor((Date.now() - inicio) / 1000);
+    $("voz-tiempo").textContent = `${Math.floor(seg / 60)}:${String(seg % 60).padStart(2, "0")}`;
+    if (seg >= 180 && rec.state === "recording") rec.stop(); // 3 minutos como máximo
+  }, 250);
+  rec.ondataavailable = (e) => e.data.size && trozos.push(e.data);
+  rec.onstop = () => {
+    clearInterval(reloj);
+    flujo.getTracks().forEach((p) => p.stop());
+    const mime = rec.mimeType || tipo || "audio/webm";
+    const ext = mime.includes("mp4") ? "m4a" : mime.includes("ogg") ? "ogg" : "webm";
+    vozArchivo = new File(trozos, `voz-en-off.${ext}`, { type: mime.split(";")[0] });
+    grabadora = null;
+    mostrarVoz();
+  };
+  grabadora = rec;
+  $("voz-tiempo").textContent = "0:00";
+  rec.start(1000);
+  mostrarVoz();
+});
+
+$("boton-parar").addEventListener("click", () => {
+  if (grabadora && grabadora.state === "recording") grabadora.stop();
+});
+
+$("campo-voz").addEventListener("change", (e) => {
+  if (e.target.files[0]) vozArchivo = e.target.files[0];
+  e.target.value = "";
+  mostrarVoz();
+});
+
+$("boton-borrar-voz").addEventListener("click", () => {
+  vozArchivo = null;
+  mostrarVoz();
+});
+
 $("boton-editar").addEventListener("click", async () => {
   const boton = $("boton-editar");
   const error = $("error-nuevo");
@@ -294,9 +384,16 @@ $("boton-editar").addEventListener("click", async () => {
       hecho += archivo.size;
       archivos.push({ id, nombre: archivo.name });
     }
+    let voz = null;
+    if (vozArchivo) {
+      $("subida-texto").textContent = "Subiendo tu voz…";
+      voz = { id: await subirADrive(vozArchivo, () => {}), nombre: vozArchivo.name };
+    }
     $("subida-texto").textContent = "Enviando las instrucciones…";
-    await api("editar", { archivos, instrucciones: $("campo-instrucciones").value });
+    await api("editar", { archivos, voz, instrucciones: $("campo-instrucciones").value });
     elegidos = [];
+    vozArchivo = null;
+    mostrarVoz();
     pintarElegidos();
     $("campo-instrucciones").value = "";
     await cargarTrabajos();
@@ -315,6 +412,7 @@ $("boton-editar").addEventListener("click", async () => {
 // Lista de vídeos
 // ---------------------------------------------------------------------------
 let trabajos = [];
+let carpeta = null; // dónde se guardan los vídeos terminados
 const videosCargados = new Map(); // id resultado -> blob URL
 let temporizador = null;
 
@@ -322,6 +420,7 @@ async function cargarTrabajos() {
   try {
     const r = await api("trabajos");
     trabajos = r.trabajos;
+    carpeta = r.carpeta || null;
     pintarTrabajos();
   } catch (e) {
     if (/clave/i.test(e.message)) return salir(e.message);
@@ -348,7 +447,7 @@ function pintarTrabajos() {
   // Conservar las tarjetas que ya existen para no cortar un vídeo que se está viendo
   const existentes = new Map(Array.from(lista.querySelectorAll(".trabajo")).map((n) => [n.dataset.id, n]));
   const nuevas = trabajos.map((t) => {
-    const firma = `${t.estado}|${t.progreso}|${t.error}|${t.resultadoId}`;
+    const firma = `${t.estado}|${t.progreso}|${t.error}|${t.resultadoId}|${t.enlace}`;
     const previa = existentes.get(t.id);
     if (previa && previa.dataset.firma === firma) return previa;
     const nodo = crearTarjeta(t);
@@ -376,7 +475,16 @@ function crearTarjeta(t) {
     t.estado === "montando" && t.progreso != null ? `${estado.texto} · ${t.progreso}%` : estado.texto;
   const nombres = t.archivos.map((a) => a.nombre).join(", ");
   nodo.querySelector(".trabajo-meta").textContent = `${formatoHora.format(new Date(t.creado))} · ${nombres}`;
-  nodo.querySelector(".instrucciones").textContent = t.instrucciones ? `«${t.instrucciones}»` : "";
+  if (t.version > 1) {
+    const v = document.createElement("span");
+    v.className = "version";
+    v.textContent = `Versión ${t.version}`;
+    nodo.querySelector(".estado-texto").append(v);
+  }
+  nodo.querySelector(".instrucciones").textContent = t.instrucciones
+    ? `${t.version > 1 ? "Cambios pedidos: " : ""}«${t.instrucciones}»`
+    : "";
+  nodo.querySelector(".lleva-voz").hidden = !t.voz;
 
   if (EN_MARCHA.includes(t.estado)) {
     const barra = nodo.querySelector(".barra");
@@ -431,24 +539,36 @@ function crearTarjeta(t) {
       });
       acciones.append(copiar);
     }
+    if (t.resultadoNombre || t.enlace) pintarUbicacion(nodo.querySelector(".ubicacion"), t);
+
+    // Pedir cambios: siempre a la vista debajo de cada vídeo terminado
     const cambios = nodo.querySelector(".cambios");
-    acciones.append(
-      boton("✏️ Pedir cambios", "boton-secundario", () => {
-        cambios.hidden = !cambios.hidden;
-        if (!cambios.hidden) cambios.querySelector("textarea").focus();
-      }),
-    );
+    cambios.hidden = false;
+    const areaCambios = cambios.querySelector("textarea");
+    for (const idea of IDEAS_CAMBIOS) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "idea";
+      b.textContent = idea;
+      b.onclick = () => {
+        const actual = areaCambios.value.trim();
+        areaCambios.value = actual ? `${actual.replace(/[.,]$/, "")}. ${idea}` : idea;
+      };
+      cambios.querySelector(".ideas-cambios").append(b);
+    }
     cambios.querySelector(".boton").onclick = async (e) => {
-      const texto = cambios.querySelector("textarea").value.trim();
-      if (!texto) return cambios.querySelector("textarea").focus();
+      const texto = areaCambios.value.trim();
+      if (!texto) return areaCambios.focus();
       e.target.disabled = true;
+      e.target.textContent = "Enviando…";
       try {
-        await api("editar", { archivos: t.archivos, instrucciones: texto, basadoEn: t.id });
+        await api("editar", { archivos: t.archivos, voz: t.voz || null, instrucciones: texto, basadoEn: t.id });
         await cargarTrabajos();
         window.scrollTo({ top: $("titulo-lista").offsetTop, behavior: "smooth" });
       } catch (err) {
         alert(err.message);
         e.target.disabled = false;
+        e.target.textContent = "✨ Hacer los cambios";
       }
     };
   }
@@ -476,6 +596,42 @@ function crearTarjeta(t) {
     );
   }
   return nodo;
+}
+
+const ES_MOVIL = /Android|iPhone|iPad/i.test(navigator.userAgent);
+
+// "Dónde está tu vídeo": carpeta de Drive + enlace directo para compartirlo
+function pintarUbicacion(ubic, t) {
+  ubic.hidden = false;
+  const ruta = ubic.querySelector(".ruta");
+  ruta.textContent = `${carpeta ? carpeta.ruta : "Google Drive"} › `;
+  const nombre = document.createElement("strong");
+  nombre.textContent = t.resultadoNombre || "vídeo";
+  ruta.append(nombre);
+  const compartir = ubic.querySelector(".copiar-enlace");
+  const abrir = ubic.querySelector(".abrir-enlace");
+  if (!t.enlace) {
+    compartir.hidden = true;
+    if (carpeta) abrir.href = carpeta.enlace;
+    else abrir.hidden = true;
+    return;
+  }
+  abrir.href = t.enlace;
+  if (ES_MOVIL && navigator.share) compartir.textContent = "🔗 Compartir enlace";
+  compartir.onclick = async () => {
+    // En el móvil abre el menú de compartir (WhatsApp, correo...); si no, lo copia
+    if (ES_MOVIL && navigator.share) {
+      try {
+        await navigator.share({ title: t.resultadoNombre || "Mi vídeo", url: t.enlace });
+        return;
+      } catch (e) {
+        if (e.name === "AbortError") return;
+      }
+    }
+    await copiarTexto(t.enlace);
+    compartir.textContent = "✔ Enlace copiado";
+    setTimeout(() => (compartir.textContent = "🔗 Copiar enlace"), 2500);
+  };
 }
 
 async function urlVideo(t) {
@@ -592,6 +748,10 @@ function demo(accion, d) {
         "He puesto el título «Bizcocho de limón 🍋» al principio, subtítulos de lo que dices y he quitado los 3 primeros segundos en los que colocabas el móvil.",
       textoInstagram: "Bizcocho de limón esponjoso y facilísimo 🍋✨\n\n#reposteria #bizcocho #recetasfaciles",
       resultadoId: "r1",
+      resultadoNombre: "Reel 2 oct 18h05 (versión 2).mp4",
+      enlace: "https://drive.google.com/file/d/demo/view",
+      version: 2,
+      voz: { id: "v", nombre: "voz-en-off.m4a" },
     },
     {
       id: "demo2",
@@ -612,7 +772,11 @@ function demo(accion, d) {
     });
   }
   if (accion === "borrar") lista.splice(lista.findIndex((t) => t.id === d.id), 1);
-  return Promise.resolve({ ok: true, trabajos: lista });
+  return Promise.resolve({
+    ok: true,
+    trabajos: lista,
+    carpeta: { ruta: "Google Drive › Editor de vídeos de mamá › 2 - Vídeos listos para Instagram", enlace: "#" },
+  });
 }
 
 async function demoSubida(archivo, alProgresar) {

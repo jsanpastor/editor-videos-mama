@@ -28,7 +28,9 @@ if (!URL_SCRIPT?.startsWith("https://")) throw new Error("Falta la URL de Apps S
 type Trabajo = {
   id: string;
   archivos: { id: string; nombre: string }[];
+  voz?: { id: string; nombre: string } | null;
   instrucciones: string;
+  version?: number;
 };
 
 const appsScript = async <T>(accion: string, datos: object): Promise<T> => {
@@ -77,6 +79,31 @@ const subir = async (archivo: string, nombre: string, carpeta: string, token: st
   return ((await r.json()) as { id: string }).id;
 };
 
+// Enlace directo: cualquiera con el enlace puede ver/descargar el vídeo (sin
+// iniciar sesión), para abrirlo en el móvil o mandarlo por WhatsApp.
+const hacerPublicoConEnlace = async (fileId: string, token: string) => {
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ role: "reader", type: "anyone" }),
+  });
+  if (!r.ok) console.warn(`No se pudo crear el enlace público (${r.status})`);
+  return r.ok;
+};
+
+// Lo que verá mamá si algo falla: claro y sin tecnicismos
+const mensajeAmable = (tecnico: string) => {
+  if (/credit balance|billing|insufficient/i.test(tecnico))
+    return "Se ha acabado el saldo de Claude (el editor). Avisa a tu hijo para que lo recargue y luego pulsa Reintentar.";
+  if (/rate.?limit|overloaded|529|429/i.test(tecnico))
+    return "El editor está muy ocupado ahora mismo. Espera unos minutos y pulsa Reintentar.";
+  if (/descargar el vídeo de Drive \(404\)/.test(tecnico))
+    return "No encuentro el vídeo original en Drive (¿se ha borrado?). Vuelve a subirlo.";
+  if (/no parece un vídeo|Invalid data/i.test(tecnico))
+    return "Uno de los archivos no parece un vídeo que se pueda abrir. Prueba con otro.";
+  return `Algo ha fallado. Pulsa Reintentar y, si sigue sin ir, avisa a tu hijo. (Detalle: ${tecnico.slice(0, 200)})`;
+};
+
 const ejecucion = process.env.GITHUB_RUN_ID
   ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
   : null;
@@ -99,10 +126,16 @@ try {
     await descargar(a.id, datos.token, ruta);
     originales.push({ ruta, nombre: a.nombre });
   }
+  let voz: { ruta: string } | null = null;
+  if (trabajo.voz) {
+    voz = { ruta: path.join(carpeta, `voz${path.extname(trabajo.voz.nombre) || ".webm"}`) };
+    await descargar(trabajo.voz.id, datos.token, voz.ruta);
+  }
 
   const salida = path.join(carpeta, "resultado.mp4");
   const { plan, duracion } = await ejecutarPipeline({
     originales,
+    voz,
     instrucciones: trabajo.instrucciones,
     planAnterior: datos.planAnterior,
     salida,
@@ -113,14 +146,27 @@ try {
   await actualizar({ estado: "subiendo", progreso: null });
   // Por si el render ha tardado mucho y el permiso de Drive (1 h) ha caducado
   const { token } = await appsScript<{ token: string }>("servidor:trabajo", { id: ID });
-  const base = path.parse(trabajo.archivos[0].nombre).name.slice(0, 50);
-  const fecha = new Date().toISOString().slice(0, 16).replace("T", " ").replace(":", "h");
-  const resultadoId = await subir(salida, `${base} (editado ${fecha}).mp4`, datos.carpetaListos, token);
+  const fecha = new Intl.DateTimeFormat("es-ES", {
+    timeZone: "Europe/Madrid",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+    .format(new Date())
+    .replace(":", "h")
+    .replace(/[,.]/g, "");
+  const version = trabajo.version && trabajo.version > 1 ? ` (versión ${trabajo.version})` : "";
+  const resultadoNombre = `Reel ${fecha}${version}.mp4`;
+  const resultadoId = await subir(salida, resultadoNombre, datos.carpetaListos, token);
+  const publico = await hacerPublicoConEnlace(resultadoId, token);
 
   await actualizar({
     estado: "listo",
     progreso: null,
     resultadoId,
+    resultadoNombre,
+    enlace: publico ? `https://drive.google.com/file/d/${resultadoId}/view?usp=sharing` : null,
     duracion,
     plan,
     resumen: plan.resumen,
@@ -131,6 +177,6 @@ try {
   const mensaje = (e as Error).message ?? String(e);
   // En el log público solo va el mensaje técnico, nunca el contenido del vídeo
   console.error(`Error en el trabajo ${ID}:`, mensaje);
-  await actualizar({ estado: "error", error: mensaje.slice(0, 400) });
+  await actualizar({ estado: "error", error: mensajeAmable(mensaje) });
   process.exit(1);
 }

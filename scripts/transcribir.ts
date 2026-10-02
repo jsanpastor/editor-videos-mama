@@ -53,7 +53,10 @@ export const transcribirWav = async (wav: string): Promise<Caption[]> => {
       anterior.endMs = Math.max(anterior.endMs, c.endMs);
       continue;
     }
-    resultado.push({ ...c });
+    // Tras un punto, whisper a veces no pone espacio delante de la palabra siguiente
+    const texto =
+      anterior && /[.!?…]$/.test(anterior.text) && !/^\s/.test(c.text) ? ` ${c.text}` : c.text;
+    resultado.push({ ...c, text: texto });
   }
   return resultado;
 };

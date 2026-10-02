@@ -10,7 +10,7 @@
  */
 
 var DRIVE = 'https://www.googleapis.com/drive/v3/files';
-var MAX_TRABAJOS = 40;
+var MAX_TRABAJOS = 30;
 
 // ---------------------------------------------------------------------------
 // Ejecutar UNA vez desde el editor (botón ▶ con "configurar" seleccionado)
@@ -75,14 +75,22 @@ var ACCIONES = {
       return marcarAtascado_(t);
     });
     lista.forEach(function (t) {
-      delete t.plan; // la web no lo necesita
       delete t.llave;
     });
-    return { ok: true, trabajos: lista };
+    return {
+      ok: true,
+      trabajos: lista,
+      // Para que la web pueda decir dónde están los vídeos terminados
+      carpeta: {
+        ruta: 'Google Drive › Editor de vídeos de mamá › 2 - Vídeos listos para Instagram',
+        enlace: 'https://drive.google.com/drive/folders/' + prop_('CARPETA_LISTOS'),
+      },
+    };
   },
 
   editar: function (d) {
     if (!d.archivos || !d.archivos.length) throw new Error('Falta el vídeo');
+    var anterior = d.basadoEn ? leerTrabajo_(d.basadoEn) : null;
     var trabajo = {
       id: Utilities.getUuid().slice(0, 8),
       creado: Date.now(),
@@ -90,8 +98,10 @@ var ACCIONES = {
       archivos: d.archivos.slice(0, 6).map(function (a) {
         return { id: String(a.id), nombre: String(a.nombre || 'vídeo').slice(0, 80) };
       }),
+      voz: d.voz && d.voz.id ? { id: String(d.voz.id), nombre: String(d.voz.nombre || 'voz').slice(0, 80) } : null,
       instrucciones: String(d.instrucciones || '').slice(0, 3000),
-      basadoEn: d.basadoEn || null,
+      basadoEn: anterior ? anterior.id : null,
+      version: anterior ? (anterior.version || 1) + 1 : 1,
       estado: 'en_cola',
       progreso: null,
     };
@@ -116,7 +126,7 @@ var ACCIONES = {
     var t = leerTrabajo_(d.id);
     if (!t) return { ok: true };
     if (t.resultadoId) papelera_(t.resultadoId);
-    PropertiesService.getScriptProperties().deleteProperty('t_' + t.id);
+    borrarTrabajo_(t.id);
     return { ok: true };
   },
 };
@@ -129,7 +139,7 @@ var ACCIONES_SERVIDOR = {
     return {
       ok: true,
       trabajo: t,
-      planAnterior: anterior && anterior.plan ? anterior.plan : null,
+      planAnterior: anterior ? leerPlan_(anterior.id) : null,
       token: ScriptApp.getOAuthToken(),
       carpetaListos: prop_('CARPETA_LISTOS'),
     };
@@ -141,10 +151,11 @@ var ACCIONES_SERVIDOR = {
     try {
       var t = leerTrabajo_(d.id);
       if (!t) throw new Error('Trabajo no encontrado: ' + d.id);
-      var permitidos = ['estado', 'progreso', 'error', 'resumen', 'textoInstagram', 'plan', 'resultadoId', 'duracion', 'ejecucion'];
+      var permitidos = ['estado', 'progreso', 'error', 'resumen', 'textoInstagram', 'resultadoId', 'resultadoNombre', 'enlace', 'duracion', 'ejecucion'];
       permitidos.forEach(function (k) {
         if (d.campos && d.campos.hasOwnProperty(k)) t[k] = d.campos[k];
       });
+      if (d.campos && d.campos.plan) guardarPlan_(t.id, d.campos.plan);
       t.actualizado = Date.now();
       // Trabajo terminado: la llave ya no sirve para nada más
       if (t.estado === 'listo' || t.estado === 'error') delete t.llave;
@@ -200,14 +211,27 @@ function leerTrabajo_(id) {
 }
 
 function guardarTrabajo_(t) {
-  var texto = JSON.stringify(t);
-  // Las propiedades admiten ~9 KB por valor: si el plan es enorme, no lo guardamos
-  if (texto.length > 8500 && t.plan) {
-    var copia = JSON.parse(texto);
-    delete copia.plan;
-    texto = JSON.stringify(copia);
-  }
-  PropertiesService.getScriptProperties().setProperty('t_' + t.id, texto);
+  PropertiesService.getScriptProperties().setProperty('t_' + t.id, JSON.stringify(t));
+}
+
+function borrarTrabajo_(id) {
+  var p = PropertiesService.getScriptProperties();
+  p.deleteProperty('t_' + id);
+  p.deleteProperty('p_' + id);
+}
+
+// El plan de edición (para poder pedir cambios luego) se guarda aparte y
+// comprimido: las propiedades solo admiten ~9 KB por valor.
+function guardarPlan_(id, plan) {
+  var zip = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(JSON.stringify(plan), 'application/json')).getBytes());
+  if (zip.length < 8800) PropertiesService.getScriptProperties().setProperty('p_' + id, zip);
+}
+
+function leerPlan_(id) {
+  var zip = PropertiesService.getScriptProperties().getProperty('p_' + id);
+  if (!zip) return null;
+  var blob = Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(zip), 'application/x-gzip'));
+  return JSON.parse(blob.getDataAsString());
 }
 
 function leerTrabajos_() {
@@ -227,7 +251,7 @@ function leerTrabajos_() {
 function limpiarAntiguos_() {
   var lista = leerTrabajos_();
   lista.slice(MAX_TRABAJOS).forEach(function (t) {
-    PropertiesService.getScriptProperties().deleteProperty('t_' + t.id);
+    borrarTrabajo_(t.id);
   });
 }
 

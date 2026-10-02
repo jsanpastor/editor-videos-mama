@@ -1,6 +1,7 @@
 // Prueba en el ordenador sin Drive ni GitHub:
 //   npm run local -- video.mp4 [otro.mp4] -i "pon subtítulos y un título"
 //   npm run local -- video.mp4 --plan plan.json --sin-transcribir   (sin gastar Claude)
+//   npm run local -- a.mp4 b.mp4 --voz voz.m4a -i "..."              (con voz en off)
 import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -12,6 +13,7 @@ const { values, positionals } = parseArgs({
   options: {
     instrucciones: { type: "string", short: "i", default: "" },
     plan: { type: "string" },
+    voz: { type: "string" },
     "sin-transcribir": { type: "boolean", default: false },
     salida: { type: "string", default: "out/resultado.mp4" },
   },
@@ -27,6 +29,7 @@ fs.mkdirSync(path.dirname(salida), { recursive: true });
 
 const { plan, duracion } = await ejecutarPipeline({
   originales: positionals.map((p) => ({ ruta: path.resolve(p), nombre: path.basename(p) })),
+  voz: values.voz ? { ruta: path.resolve(values.voz) } : null,
   instrucciones: values.instrucciones!,
   planFijo: values.plan ? (JSON.parse(fs.readFileSync(values.plan, "utf8")) as Plan) : null,
   transcribir: !values["sin-transcribir"],

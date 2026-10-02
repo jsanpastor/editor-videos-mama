@@ -7,6 +7,7 @@ const propsPorDefecto: PropsEditor = {
   plan: planPorDefecto,
   fuentes: [{ src: "fuentes/0.mp4", duracion: 8, ancho: 1920, alto: 1080 }],
   subtitulos: [[]],
+  voz: null,
 };
 
 export const RemotionRoot: React.FC = () => (

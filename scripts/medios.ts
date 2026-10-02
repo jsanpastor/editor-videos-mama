@@ -104,3 +104,32 @@ export const fotogramas = async (
 export const audioParaWhisper = async (archivo: string, salida: string) => {
   await ffmpeg(["-i", archivo, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", salida]);
 };
+
+export const infoAudio = async (archivo: string) => {
+  const { stdout } = await run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "json", archivo]);
+  return { duracion: Number((JSON.parse(stdout) as { format: { duration: string } }).format.duration) };
+};
+
+// Voz en off grabada con el móvil: quita graves y ruido de fondo, recorta el
+// silencio del principio y del final e iguala el volumen.
+export const limpiarVoz = async (entrada: string, salida: string) => {
+  await ffmpeg([
+    "-i",
+    entrada,
+    "-af",
+    [
+      "highpass=f=80",
+      "afftdn=nf=-25",
+      "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.15",
+      "areverse",
+      "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.25",
+      "areverse",
+      "loudnorm=I=-16:TP=-1.5:LRA=11",
+    ].join(","),
+    "-ar",
+    "48000",
+    "-ac",
+    "2",
+    salida,
+  ]);
+};
