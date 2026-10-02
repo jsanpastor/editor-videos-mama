@@ -95,6 +95,10 @@ const hacerPublicoConEnlace = async (fileId: string, token: string) => {
 const mensajeAmable = (tecnico: string) => {
   if (/credit balance|billing|insufficient/i.test(tecnico))
     return "Se ha acabado el saldo de Claude (el editor). Avisa a tu hijo para que lo recargue y luego pulsa Reintentar.";
+  if (/OAuth|401|authenticate|setup-token/i.test(tecnico))
+    return "El editor ha perdido el permiso para usar Claude. Avisa a tu hijo para que renueve el token (claude setup-token) y luego pulsa Reintentar.";
+  if (/usage limit|limit reached|límite/i.test(tecnico))
+    return "Se ha llegado al límite de uso de Claude por ahora. Espera un rato (unas horas como mucho) y pulsa Reintentar.";
   if (/rate.?limit|overloaded|529|429/i.test(tecnico))
     return "El editor está muy ocupado ahora mismo. Espera unos minutos y pulsa Reintentar.";
   if (/descargar el vídeo de Drive \(404\)/.test(tecnico))

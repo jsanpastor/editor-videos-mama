@@ -52,7 +52,12 @@ jobs:
       - name: Preparar Chrome para Remotion
         run: npx remotion browser ensure
 
+      # Claude Code con la suscripción del dueño (token de `claude setup-token`):
+      # no gasta créditos de la API de pago
+      - name: Instalar Claude Code
+        run: npm install -g @anthropic-ai/claude-code && claude --version
+
       - name: Editar el vídeo
         run: npm run procesar
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

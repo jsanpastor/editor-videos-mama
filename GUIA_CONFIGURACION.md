@@ -26,8 +26,7 @@ editado listo para Instagram.
 
 - Cuenta de **GitHub**.
 - Cuenta de **Google** (la de tu Drive).
-- Una **API key de Anthropic** con saldo: <https://console.anthropic.com> → *API Keys*.
-  Cada vídeo cuesta del orden de **5–15 céntimos** de Claude.
+- Una **suscripción de Claude** (Pro o Max) para usar Claude Code. No hacen falta créditos de API.
 - GitHub Actions es **gratis** si el repositorio es público (que es lo que recomendamos: el
   código es público, pero los vídeos, las instrucciones y las claves no).
 
@@ -82,13 +81,27 @@ git push -u origin main
 > Si algún día cambias `Code.gs`: *Implementar* → *Gestionar implementaciones* → ✏️ →
 > *Versión: nueva versión* → *Implementar*. Así la URL no cambia.
 
-## Paso 4 · Tu API key de Anthropic en GitHub
+## Paso 4 · Tu plan de Claude en GitHub (sin créditos de pago)
 
-En el repositorio → *Settings* → *Secrets and variables* → *Actions* → **New repository
-secret**: nombre `ANTHROPIC_API_KEY`, valor tu API key (`sk-ant-...`).
+El editor usa **Claude Code con tu suscripción de Claude** (Pro/Max), no la API de pago.
+
+1. En una terminal de tu ordenador ejecuta:
+
+```bash
+claude setup-token
+```
+
+   Se abre el navegador para que autorices con tu cuenta de Claude. Al terminar, la
+   terminal muestra un token largo (`sk-ant-oat...`). Cópialo.
+2. En el repositorio → *Settings* → *Secrets and variables* → *Actions* → **New repository
+   secret**: nombre `CLAUDE_CODE_OAUTH_TOKEN`, valor el token.
 
 No hace falta ningún otro secreto: para cada vídeo, Apps Script genera una llave de un solo
 uso que GitHub Actions lee del aviso sin que aparezca en los logs públicos.
+
+> Los vídeos comparten el límite de uso de tu plan con tu propio uso de Claude Code. Si
+> prefieres pagar por uso con la API, crea el secreto `ANTHROPIC_API_KEY` y añade
+> `CLAUDE_MOTOR: api` al `env` del paso *Editar el vídeo* del workflow.
 
 ## Paso 5 · Publicar la web
 
