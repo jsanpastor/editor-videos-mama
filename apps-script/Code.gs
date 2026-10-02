@@ -92,6 +92,11 @@ var ACCIONES = {
 
   editar: function (d) {
     if (!d.archivos || !d.archivos.length) throw new Error('Falta el vídeo');
+    // Si la misma petición llega dos veces (Google a veces da error aunque la haya
+    // hecho, y la web la repite), se devuelve el vídeo ya creado en vez de duplicarlo
+    var cache = CacheService.getScriptCache();
+    var yaHecho = d.idCliente ? cache.get('ed_' + d.idCliente) : null;
+    if (yaHecho && leerTrabajo_(yaHecho)) return { ok: true, trabajo: leerTrabajo_(yaHecho), repetido: true };
     var anterior = d.basadoEn ? leerTrabajo_(d.basadoEn) : null;
     var trabajo = {
       id: Utilities.getUuid().slice(0, 8),
@@ -117,6 +122,7 @@ var ACCIONES = {
       estado: 'en_cola',
       progreso: null,
     };
+    if (d.idCliente) cache.put('ed_' + d.idCliente, trabajo.id, 21600);
     avisarGitHub_(trabajo);
     limpiarAntiguos_();
     delete trabajo.llave;
@@ -126,6 +132,8 @@ var ACCIONES = {
   reintentar: function (d) {
     var t = leerTrabajo_(d.id);
     if (!t) throw new Error('No encuentro ese vídeo');
+    // Ya se ha relanzado hace un momento: no lanzarlo otra vez
+    if (t.estado === 'en_cola' && Date.now() - t.actualizado < 3 * 60 * 1000) return { ok: true, repetido: true };
     t.estado = 'en_cola';
     t.error = null;
     t.progreso = null;

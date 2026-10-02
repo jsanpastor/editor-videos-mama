@@ -59,10 +59,11 @@ if (deEnlace) {
 // ---------------------------------------------------------------------------
 async function api(accion, datos = {}) {
   if (MODO_DEMO) return demo(accion, datos);
-  // Las consultas se pueden repetir sin problema. "editar" solo se repite cuando
-  // Google avisa de que la petición no llegó a ejecutarse (reintentar), para no
-  // duplicar un vídeo.
-  const sePuedeRepetir = ["trabajos", "token", "hola"].includes(accion);
+  // Todas las peticiones se pueden repetir sin duplicar nada: "editar" lleva un
+  // identificador único y el servidor reconoce la repetición; "reintentar" no
+  // relanza un vídeo que ya está en cola.
+  const sePuedeRepetir = true;
+  if (accion === "editar" && !datos.idCliente) datos = { ...datos, idCliente: idUnico() };
   for (let intento = 1; ; intento++) {
     const ultimo = intento >= 3;
     let r;
@@ -93,6 +94,9 @@ async function api(accion, datos = {}) {
     return json;
   }
 }
+
+const idUnico = () =>
+  window.crypto && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 let tokenCache = null;
 async function tokenDrive() {
