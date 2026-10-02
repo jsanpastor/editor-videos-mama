@@ -4,13 +4,14 @@ const URL_API = window.CONFIG && window.CONFIG.APPS_SCRIPT_URL;
 const MODO_DEMO = URL_API === "DEMO" || new URLSearchParams(location.search).has("demo");
 
 const IDEAS = [
-  "Haz un reel mezclando los clips con transiciones y efectos de sonido",
+  "Haz un reel mezclando los clips",
   "Es para una historia de Instagram",
   "Que dure menos de 20 segundos",
   "Pon subtítulos",
   "Quita los silencios cuando hablo",
   "Pon un título al principio con letra neón",
   "Ritmo rápido y con energía",
+  "Con efectos de sonido",
   "Ponle un filtro cálido",
   "Pon «Sígueme para más» al final",
 ];
@@ -18,7 +19,9 @@ const IDEAS = [
 const IDEAS_CAMBIOS = [
   "Más corto",
   "Más rápido",
-  "Más efectos de sonido",
+  "Transiciones más suaves",
+  "Sin transiciones, solo cortes",
+  "Con efectos de sonido",
   "Sin efectos de sonido",
   "Letras más grandes",
   "Cambia la letra",
@@ -83,16 +86,28 @@ if (deEnlace) {
 // ---------------------------------------------------------------------------
 async function api(accion, datos = {}) {
   if (MODO_DEMO) return demo(accion, datos);
-  let r;
-  try {
-    r = await fetch(URL_API, {
-      method: "POST",
-      body: JSON.stringify({ accion, clave, ...datos }),
-    });
-  } catch {
-    throw new Error("No hay conexión a internet. Inténtalo otra vez en un momento.");
+  // Solo se reintentan las consultas: repetir "editar" podría duplicar un vídeo
+  const intentos = ["trabajos", "token", "hola"].includes(accion) ? 3 : 1;
+  let json = null;
+  for (let i = 1; i <= intentos && !json; i++) {
+    let r;
+    try {
+      r = await fetch(URL_API, {
+        method: "POST",
+        body: JSON.stringify({ accion, clave, ...datos }),
+      });
+    } catch {
+      if (i === intentos) throw new Error("No hay conexión a internet. Inténtalo otra vez en un momento.");
+      continue;
+    }
+    try {
+      json = await r.json();
+    } catch {
+      // Google a veces devuelve una página de error en vez de la respuesta
+      if (i === intentos) throw new Error("Google no responde ahora mismo. Inténtalo otra vez en un minuto.");
+      await esperar(1500 * i);
+    }
   }
-  const json = await r.json();
   if (!json.ok) throw new Error(json.error || "Error desconocido");
   return json;
 }

@@ -24,7 +24,9 @@ import {
   duracionTotalFrames,
   type EfectoPlan,
   FPS,
-  framesDeSegmento,
+  lineaDeTiempo,
+  type Tramo,
+  type Transicion,
   type Fuente,
   type Letra,
   type Plan,
@@ -78,65 +80,71 @@ const FILTROS: Record<Plan["filtro"], string> = {
   suave: "brightness(1.08) contrast(0.92) saturate(0.95)",
 };
 
-const DURACION_TRANSICION = 9; // frames
+const NEGRO_FRAMES = 8; // duración de cada mitad del "fundido a negro"
 
 const src = (f: Fuente) => (/^https?:\/\//.test(f.src) ? f.src : staticFile(f.src));
-const limpio = (n: number) => interpolate(n, [0, 1], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+const curva = Easing.inOut(Easing.cubic);
+const progreso = (f: number, desde: number, frames: number) =>
+  frames <= 0 ? 1 : curva(interpolate(f, [desde, desde + frames], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }));
 
-// Cómo entra cada trozo (los primeros frames)
-const estiloTransicion = (tipo: Segmento["transicion"], frame: number, ancho: number) => {
-  const p = limpio(frame / DURACION_TRANSICION);
-  const suave = Easing.out(Easing.cubic)(p);
-  switch (tipo) {
-    case "zoom":
-      return { transform: `scale(${interpolate(suave, [0, 1], [1.45, 1])})`, filter: `blur(${(1 - suave) * 10}px)` };
-    case "deslizar":
-      return {
-        transform: `translateX(${(1 - suave) * ancho * 0.6}px)`,
-        filter: `blur(${(1 - suave) * 28}px)`,
-      };
-    case "desenfoque":
-      return { filter: `blur(${(1 - suave) * 40}px)` };
-    case "glitch": {
-      if (frame >= DURACION_TRANSICION) return {};
-      const salto = ((frame * 37) % 7) - 3;
-      // Separación de colores con sombras rojas/azules desplazadas (sin abrir el clip otra vez)
-      const d = 10 + Math.abs(salto) * 6;
-      return {
-        transform: `translate(${salto * 14}px, ${(((frame * 13) % 5) - 2) * 6}px) skewX(${salto * 2}deg)`,
-        filter: `drop-shadow(${d}px 0 0 rgba(255,0,80,0.75)) drop-shadow(${-d}px 0 0 rgba(0,220,255,0.75)) contrast(1.3)`,
-      };
+// Transición entre dos trozos: el que entra (encima) y el que sale (debajo)
+// se mezclan durante el solape. Movimientos suaves, como en una app de edición.
+const estiloTransicion = (
+  frame: number,
+  tramo: Tramo,
+  entrada: Transicion,
+  salida: Transicion | null,
+): React.CSSProperties => {
+  const transform: string[] = [];
+  let opacity = 1;
+  if (tramo.solapeEntrada > 0 && frame < tramo.solapeEntrada) {
+    const p = progreso(frame, 0, tramo.solapeEntrada);
+    if (entrada === "fundido") opacity = p;
+    if (entrada === "zoom") {
+      opacity = p;
+      transform.push(`scale(${interpolate(p, [0, 1], [1.12, 1])})`);
     }
-    default:
-      return {};
+    if (entrada === "deslizar") transform.push(`translateX(${(1 - p) * 100}%)`);
   }
+  const inicioSalida = tramo.duracion - tramo.solapeSalida;
+  if (salida && tramo.solapeSalida > 0 && frame >= inicioSalida) {
+    const q = progreso(frame, inicioSalida, tramo.solapeSalida);
+    if (salida === "zoom") transform.push(`scale(${interpolate(q, [0, 1], [1, 1.15])})`);
+    if (salida === "deslizar") transform.push(`translateX(${-q * 100}%)`);
+  }
+  return { opacity, transform: transform.join(" ") || undefined };
 };
 
 const Trozo: React.FC<{
   segmento: Segmento;
+  tramo: Tramo;
+  siguiente: Transicion | null;
   fuente: Fuente;
   plan: Plan;
   cerca: boolean;
   primero: boolean;
   volumen: (f: number) => number;
-}> = ({ segmento, fuente, plan, cerca, primero, volumen }) => {
+}> = ({ segmento, tramo, siguiente, fuente, plan, cerca, primero, volumen }) => {
   const frame = useCurrentFrame();
-  const { width } = useVideoConfig();
-  const duracion = framesDeSegmento(segmento);
+  const duracion = tramo.duracion;
   const zoom =
-    (plan.zoomLento ? interpolate(frame, [0, duracion], [1, 1.08], { extrapolateRight: "clamp" }) : 1) *
-    (cerca ? 1.18 : 1);
-  const transicion = primero ? "corte" : segmento.transicion;
-  const entrada = estiloTransicion(transicion, frame, width);
+    (plan.zoomLento ? interpolate(frame, [0, duracion], [1, 1.06], { extrapolateRight: "clamp" }) : 1) *
+    (cerca ? 1.15 : 1);
+  const entrada: Transicion = primero ? "corte" : segmento.transicion;
   const comun = {
     src: src(fuente),
     trimBefore: Math.round(segmento.inicio * FPS),
     playbackRate: segmento.velocidad,
   };
+  // Fundido a negro: el que sale se oscurece al final y el que entra aparece desde negro
+  const negro = Math.max(
+    entrada === "fundido_negro" ? 1 - progreso(frame, 0, NEGRO_FRAMES) : 0,
+    siguiente === "fundido_negro" ? progreso(frame, duracion - NEGRO_FRAMES, NEGRO_FRAMES) : 0,
+  );
 
   return (
-    <AbsoluteFill style={{ filter: FILTROS[plan.filtro], backgroundColor: "black", overflow: "hidden" }}>
-      <AbsoluteFill style={entrada}>
+    <AbsoluteFill style={{ overflow: "hidden", ...estiloTransicion(frame, tramo, entrada, siguiente) }}>
+      <AbsoluteFill style={{ filter: FILTROS[plan.filtro], backgroundColor: "black" }}>
         {plan.encaje === "encajar" ? (
           <AbsoluteFill>
             <OffthreadVideo
@@ -164,12 +172,7 @@ const Trozo: React.FC<{
           />
         </AbsoluteFill>
       </AbsoluteFill>
-      {transicion === "flash" ? (
-        <AbsoluteFill style={{ backgroundColor: "white", opacity: interpolate(frame, [0, 7], [1, 0], { extrapolateRight: "clamp" }) }} />
-      ) : null}
-      {transicion === "fundido_negro" ? (
-        <AbsoluteFill style={{ backgroundColor: "black", opacity: interpolate(frame, [0, 10], [1, 0], { extrapolateRight: "clamp" }) }} />
-      ) : null}
+      {negro > 0 ? <AbsoluteFill style={{ backgroundColor: "black", opacity: negro }} /> : null}
     </AbsoluteFill>
   );
 };
@@ -402,40 +405,55 @@ export const EditorVideo: React.FC<PropsEditor> = (props) => {
     { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.ease) },
   );
 
-  let desde = 0;
+  const { tramos } = lineaDeTiempo(plan);
   let cerca = false;
   const sonidosTransicion: React.ReactNode[] = [];
   const trozos = plan.segmentos.map((s, i) => {
-    const duracion = framesDeSegmento(s);
-    const inicioTrozo = desde;
-    desde += duracion;
+    const tramo = tramos[i];
+    const siguiente = plan.segmentos[i + 1]?.transicion ?? null;
     // Plano normal / plano cerca alternando cuando se encadenan trozos del mismo vídeo
     const anterior = plan.segmentos[i - 1];
     cerca = plan.zoomAlterno && anterior?.video === s.video ? !cerca : false;
     const volumen = (f: number) => {
-      const global = inicioTrozo + f;
+      const global = tramo.inicio + f;
       const fade = interpolate(
         global,
         [0, fundido, total - fundido, total],
         [plan.fundidoEntrada ? 0 : 1, 1, 1, plan.fundidoSalida ? 0 : 1],
         { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
       );
-      return plan.volumen * fade * factorVoz(global);
+      // En los solapes, el sonido de un trozo se cruza con el del otro
+      const cruce = Math.min(
+        tramo.solapeEntrada > 0 ? interpolate(f, [0, tramo.solapeEntrada], [0, 1], { extrapolateRight: "clamp" }) : 1,
+        tramo.solapeSalida > 0
+          ? interpolate(f, [tramo.duracion - tramo.solapeSalida, tramo.duracion], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
+          : 1,
+      );
+      return plan.volumen * fade * cruce * factorVoz(global);
     };
     if (s.sonidoEntrada !== "ninguno") {
-      // El whoosh suena un pelín antes del corte para que "empuje" la transición
+      // El whoosh suena un pelín antes del corte para que acompañe la transición
       const adelanto = ["whoosh", "swoosh_rapido", "subida"].includes(s.sonidoEntrada)
         ? s.sonidoEntrada === "subida" ? 55 : 6
         : 0;
       sonidosTransicion.push(
-        <Sequence key={`st${i}`} from={Math.max(0, inicioTrozo - adelanto)} durationInFrames={FPS * 3}>
-          <Efecto sonido={s.sonidoEntrada} volumen={0.8 * vfx} />
+        <Sequence key={`st${i}`} from={Math.max(0, tramo.inicio - adelanto)} durationInFrames={FPS * 3}>
+          <Efecto sonido={s.sonidoEntrada} volumen={0.6 * vfx} />
         </Sequence>,
       );
     }
     return (
-      <Sequence key={i} from={inicioTrozo} durationInFrames={duracion} premountFor={FPS}>
-        <Trozo segmento={s} fuente={fuentes[s.video]} plan={plan} cerca={cerca} primero={i === 0} volumen={volumen} />
+      <Sequence key={i} from={tramo.inicio} durationInFrames={tramo.duracion} premountFor={FPS}>
+        <Trozo
+          segmento={s}
+          tramo={tramo}
+          siguiente={siguiente}
+          fuente={fuentes[s.video]}
+          plan={plan}
+          cerca={cerca}
+          primero={i === 0}
+          volumen={volumen}
+        />
       </Sequence>
     );
   });

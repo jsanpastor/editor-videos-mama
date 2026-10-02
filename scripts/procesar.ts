@@ -34,14 +34,23 @@ type Trabajo = {
 };
 
 const appsScript = async <T>(accion: string, datos: object): Promise<T> => {
-  const r = await fetch(URL_SCRIPT, {
-    method: "POST",
-    body: JSON.stringify({ accion, id: ID, llave: LLAVE, ...datos }),
-    redirect: "follow",
-  });
-  const json = (await r.json()) as { ok: boolean; error?: string } & T;
-  if (!json.ok) throw new Error(`Apps Script (${accion}): ${json.error}`);
-  return json;
+  // Google a veces responde con una página de error suelta: se reintenta
+  for (let intento = 1; ; intento++) {
+    const r = await fetch(URL_SCRIPT, {
+      method: "POST",
+      body: JSON.stringify({ accion, id: ID, llave: LLAVE, ...datos }),
+      redirect: "follow",
+    });
+    const texto = await r.text();
+    if (!texto.trimStart().startsWith("{")) {
+      if (intento >= 4) throw new Error(`Apps Script (${accion}) no responde bien (${r.status})`);
+      await new Promise((res) => setTimeout(res, 2000 * intento));
+      continue;
+    }
+    const json = JSON.parse(texto) as { ok: boolean; error?: string } & T;
+    if (!json.ok) throw new Error(`Apps Script (${accion}): ${json.error}`);
+    return json;
+  }
 };
 
 const actualizar = (campos: Record<string, unknown>) =>
@@ -91,6 +100,21 @@ const hacerPublicoConEnlace = async (fileId: string, token: string) => {
   return r.ok;
 };
 
+// Comparte el vídeo con una persona: Google le manda un correo con el enlace
+const compartirCon = async (fileId: string, token: string, correo: string, mensaje: string) => {
+  const url = new URL(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`);
+  url.searchParams.set("sendNotificationEmail", "true");
+  url.searchParams.set("emailMessage", mensaje);
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ role: "reader", type: "user", emailAddress: correo }),
+  });
+  // Si el correo no tiene cuenta de Google, Drive puede rechazarlo: el enlace
+  // público del vídeo sigue funcionando igualmente.
+  if (!r.ok) console.warn(`No se pudo compartir con un destinatario (${r.status})`);
+};
+
 // Lo que verá mamá si algo falla: claro y sin tecnicismos
 const mensajeAmable = (tecnico: string) => {
   if (/credit balance|billing|insufficient/i.test(tecnico))
@@ -118,6 +142,7 @@ try {
     planAnterior: Plan | null;
     token: string;
     carpetaListos: string;
+    compartirCon?: string[];
   }>("servidor:trabajo", { id: ID });
   const { trabajo } = datos;
 
@@ -164,6 +189,9 @@ try {
   const resultadoNombre = `Reel ${fecha}${version}.mp4`;
   const resultadoId = await subir(salida, resultadoNombre, datos.carpetaListos, token);
   const publico = await hacerPublicoConEnlace(resultadoId, token);
+  for (const correo of datos.compartirCon ?? []) {
+    await compartirCon(resultadoId, token, correo, `¡Nuevo vídeo listo! 🎬 ${plan.resumen}`.slice(0, 900));
+  }
 
   await actualizar({
     estado: "listo",

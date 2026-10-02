@@ -52,6 +52,18 @@ export const LETRAS = {
 export type Letra = keyof typeof LETRAS;
 const NOMBRES_LETRAS = Object.keys(LETRAS) as [Letra, ...Letra[]];
 
+export const TRANSICIONES = ["corte", "fundido", "zoom", "deslizar", "fundido_negro"] as const;
+export type Transicion = (typeof TRANSICIONES)[number];
+// Frames que se solapan dos trozos en las transiciones suaves
+export const SOLAPE_FRAMES = 10;
+const SOLAPA: Record<Transicion, boolean> = {
+  corte: false,
+  fundido: true,
+  zoom: true,
+  deslizar: true,
+  fundido_negro: false,
+};
+
 const segmentoSchema = z.object({
   video: z.number().describe("Índice del vídeo original (0 = el primero que subió)"),
   inicio: z.number().describe("Segundo del vídeo original donde empieza el trozo"),
@@ -60,12 +72,12 @@ const segmentoSchema = z.object({
     .number()
     .describe("1 = normal, 2 = el doble de rápido, 0.5 = cámara lenta. Entre 0.25 y 4"),
   transicion: z
-    .enum(["corte", "zoom", "flash", "deslizar", "glitch", "desenfoque", "fundido_negro"])
+    .enum(TRANSICIONES)
     .describe(
-      "Cómo ENTRA este trozo (se ignora en el primero si no hay nada antes). corte: cambio seco; zoom: entra con un acercamiento rápido; flash: destello blanco; deslizar: barrido lateral rápido (whip pan); glitch: fallo digital con colores separados; desenfoque: entra desenfocado; fundido_negro: pasa por negro",
+      "Cómo se pasa del trozo anterior a este (se ignora en el primero). corte: cambio seco (lo normal y lo más natural); fundido: los dos planos se mezclan suavemente; zoom: el plano anterior se acerca y se funde con este (suave); deslizar: este empuja al anterior hacia un lado; fundido_negro: pasa por negro (cambio de tema o final). Las transiciones distintas de corte y fundido_negro solapan los dos trozos 0,33 segundos",
     ),
   sonidoEntrada: sonidoOpcional.describe(
-    "Efecto de sonido que suena justo cuando empieza este trozo (p. ej. whoosh con deslizar/zoom, glitch con glitch)",
+    "Efecto de sonido al empezar este trozo. Normalmente 'ninguno': solo si ella pide efectos de sonido",
   ),
 });
 
@@ -200,7 +212,10 @@ export const sanearPlan = (plan: Plan, fuentes: Fuente[]): Plan => {
       const dur = fuentes[s.video].duracion;
       const inicio = limitar(s.inicio, 0, dur);
       const fin = limitar(s.fin, inicio, dur);
-      return { ...s, inicio, fin, velocidad: limitar(s.velocidad, 0.25, 4) };
+      const transicion: Transicion = (TRANSICIONES as readonly string[]).includes(s.transicion)
+        ? s.transicion
+        : "fundido";
+      return { ...s, inicio, fin, transicion, velocidad: limitar(s.velocidad, 0.25, 4) };
     })
     .filter((s) => s.fin - s.inicio >= 0.2);
 
@@ -214,8 +229,8 @@ export const sanearPlan = (plan: Plan, fuentes: Fuente[]): Plan => {
             inicio: 0,
             fin: f.duracion,
             velocidad: 1,
-            transicion: i === 0 ? ("corte" as const) : ("deslizar" as const),
-            sonidoEntrada: i === 0 ? ("ninguno" as const) : ("whoosh" as const),
+            transicion: i === 0 ? ("corte" as const) : ("fundido" as const),
+            sonidoEntrada: "ninguno" as const,
           })),
     volumen: limitar(plan.volumen, 0, 2),
     volumenEfectos: limitar(plan.volumenEfectos, 0, 1.2),
@@ -272,8 +287,34 @@ export const aplicarQuitarSilencios = (plan: Plan, subtitulos: Caption[][]): Pla
 export const framesDeSegmento = (s: Segmento) =>
   Math.max(1, Math.round(((s.fin - s.inicio) / s.velocidad) * FPS));
 
-export const duracionTotalFrames = (plan: Plan) =>
-  plan.segmentos.reduce((acc, s) => acc + framesDeSegmento(s), 0);
+export type Tramo = {
+  inicio: number; // frame del vídeo final en que empieza el trozo
+  duracion: number; // frames
+  solapeEntrada: number; // frames que se mezcla con el anterior
+  solapeSalida: number; // frames que se mezcla con el siguiente
+};
+
+// Dónde cae cada trozo en el vídeo final, contando que las transiciones
+// suaves hacen que dos trozos seguidos se solapen un poco.
+export const lineaDeTiempo = (plan: Plan): { tramos: Tramo[]; total: number } => {
+  const tramos: Tramo[] = [];
+  let cursor = 0;
+  plan.segmentos.forEach((s, i) => {
+    const duracion = framesDeSegmento(s);
+    const anterior = tramos[i - 1];
+    const solape =
+      i > 0 && SOLAPA[s.transicion]
+        ? Math.min(SOLAPE_FRAMES, Math.floor(duracion / 2), Math.floor(anterior.duracion / 2))
+        : 0;
+    if (anterior) anterior.solapeSalida = solape;
+    const inicio = cursor - solape;
+    tramos.push({ inicio, duracion, solapeEntrada: solape, solapeSalida: 0 });
+    cursor = inicio + duracion;
+  });
+  return { tramos, total: Math.max(1, cursor) };
+};
+
+export const duracionTotalFrames = (plan: Plan) => lineaDeTiempo(plan).total;
 
 // Pasa los subtítulos (en tiempo del vídeo original) a la línea de tiempo
 // del vídeo final, teniendo en cuenta cortes y cambios de velocidad.
@@ -282,8 +323,9 @@ export const subtitulosEnLineaFinal = (
   subtitulos: Caption[][],
 ): Caption[] => {
   const resultado: Caption[] = [];
-  let inicioSegmentoMs = 0;
-  for (const s of plan.segmentos) {
+  const { tramos } = lineaDeTiempo(plan);
+  for (const [i, s] of plan.segmentos.entries()) {
+    const inicioSegmentoMs = (tramos[i].inicio / FPS) * 1000;
     const desdeMs = s.inicio * 1000;
     const hastaMs = s.fin * 1000;
     for (const c of subtitulos[s.video] ?? []) {
@@ -297,7 +339,6 @@ export const subtitulosEnLineaFinal = (
         timestampMs: c.timestampMs === null ? null : mapear(c.timestampMs),
       });
     }
-    inicioSegmentoMs += (framesDeSegmento(s) / FPS) * 1000;
   }
   return resultado;
 };
@@ -309,7 +350,7 @@ export const planPorDefecto: Plan = {
   encaje: "encajar",
   segmentos: [
     { video: 0, inicio: 0, fin: 3, velocidad: 1, transicion: "corte", sonidoEntrada: "ninguno" },
-    { video: 0, inicio: 4, fin: 7, velocidad: 1, transicion: "deslizar", sonidoEntrada: "whoosh" },
+    { video: 0, inicio: 4, fin: 7, velocidad: 1, transicion: "fundido", sonidoEntrada: "ninguno" },
   ],
   quitarSilencios: false,
   zoomAlterno: false,
@@ -330,8 +371,8 @@ export const planPorDefecto: Plan = {
       color: "#FFFFFF",
       fondo: "ninguno",
       colorFondo: "#000000",
-      animacion: "rebote",
-      sonido: "pop",
+      animacion: "aparecer",
+      sonido: "ninguno",
     },
   ],
   efectos: [],

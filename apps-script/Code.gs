@@ -142,6 +142,15 @@ var ACCIONES_SERVIDOR = {
       planAnterior: anterior ? leerPlan_(anterior.id) : null,
       token: ScriptApp.getOAuthToken(),
       carpetaListos: prop_('CARPETA_LISTOS'),
+      // Correos que reciben automáticamente cada vídeo terminado (propiedad COMPARTIR_CON, separados por comas)
+      compartirCon: (PropertiesService.getScriptProperties().getProperty('COMPARTIR_CON') || '')
+        .split(',')
+        .map(function (c) {
+          return c.trim();
+        })
+        .filter(function (c) {
+          return /@/.test(c);
+        }),
     };
   },
 
