@@ -27,6 +27,7 @@ import {
   lineaDeTiempo,
   type Tramo,
   type Transicion,
+  ventanaTexto,
   type Fuente,
   type Letra,
   type Plan,
@@ -87,33 +88,12 @@ const curva = Easing.inOut(Easing.cubic);
 const progreso = (f: number, desde: number, frames: number) =>
   frames <= 0 ? 1 : curva(interpolate(f, [desde, desde + frames], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }));
 
-// Transición entre dos trozos: el que entra (encima) y el que sale (debajo)
-// se mezclan durante el solape. Movimientos suaves, como en una app de edición.
-const estiloTransicion = (
-  frame: number,
-  tramo: Tramo,
-  entrada: Transicion,
-  salida: Transicion | null,
-): React.CSSProperties => {
-  const transform: string[] = [];
-  let opacity = 1;
-  if (tramo.solapeEntrada > 0 && frame < tramo.solapeEntrada) {
-    const p = progreso(frame, 0, tramo.solapeEntrada);
-    if (entrada === "fundido") opacity = p;
-    if (entrada === "zoom") {
-      opacity = p;
-      transform.push(`scale(${interpolate(p, [0, 1], [1.12, 1])})`);
-    }
-    if (entrada === "deslizar") transform.push(`translateX(${(1 - p) * 100}%)`);
-  }
-  const inicioSalida = tramo.duracion - tramo.solapeSalida;
-  if (salida && tramo.solapeSalida > 0 && frame >= inicioSalida) {
-    const q = progreso(frame, inicioSalida, tramo.solapeSalida);
-    if (salida === "zoom") transform.push(`scale(${interpolate(q, [0, 1], [1, 1.15])})`);
-    if (salida === "deslizar") transform.push(`translateX(${-q * 100}%)`);
-  }
-  return { opacity, transform: transform.join(" ") || undefined };
-};
+// Fundido cruzado: el trozo que entra (encima) aparece poco a poco sobre el que
+// sale, que sigue intacto debajo (sin zooms ni desplazamientos: imagen limpia).
+const estiloTransicion = (frame: number, tramo: Tramo, entrada: Transicion): React.CSSProperties =>
+  entrada === "fundido" && tramo.solapeEntrada > 0 && frame < tramo.solapeEntrada
+    ? { opacity: progreso(frame, 0, tramo.solapeEntrada) }
+    : {};
 
 const Trozo: React.FC<{
   segmento: Segmento;
@@ -143,7 +123,7 @@ const Trozo: React.FC<{
   );
 
   return (
-    <AbsoluteFill style={{ overflow: "hidden", ...estiloTransicion(frame, tramo, entrada, siguiente) }}>
+    <AbsoluteFill style={{ overflow: "hidden", ...estiloTransicion(frame, tramo, entrada) }}>
       <AbsoluteFill style={{ filter: FILTROS[plan.filtro], backgroundColor: "black" }}>
         {plan.encaje === "encajar" ? (
           <AbsoluteFill>
@@ -177,18 +157,37 @@ const Trozo: React.FC<{
   );
 };
 
-const POSICION: Record<TextoPlan["posicion"], React.CSSProperties> = {
-  // Márgenes pensados para que la interfaz de Instagram (nombre, botones,
-  // descripción) no tape los textos en Reels e Historias
-  arriba: { justifyContent: "flex-start", paddingTop: "15%" },
-  centro: { justifyContent: "center" },
-  abajo: { justifyContent: "flex-end", paddingBottom: "24%" },
+// Zonas seguras de Instagram (Reels e Historias en 1080x1920): arriba van el
+// nombre/la barra de progreso, abajo la descripción y a la derecha los botones
+// de "me gusta", comentar y compartir. Los textos nunca entran ahí.
+const zonaSegura = (width: number, height: number) => {
+  const vertical = height / width > 1.5;
+  return {
+    arriba: vertical ? 0.14 * height : 0.08 * height,
+    abajo: vertical ? 0.24 * height : 0.1 * height,
+    izquierda: 0.07 * width,
+    derecha: vertical ? 0.15 * width : 0.07 * width,
+  };
+};
+
+const usePosicion = (posicion: TextoPlan["posicion"]): React.CSSProperties => {
+  const { width, height } = useVideoConfig();
+  const z = zonaSegura(width, height);
+  return {
+    alignItems: "center",
+    paddingLeft: z.izquierda,
+    paddingRight: z.derecha,
+    paddingTop: z.arriba,
+    paddingBottom: z.abajo,
+    justifyContent: posicion === "arriba" ? "flex-start" : posicion === "abajo" ? "flex-end" : "center",
+  };
 };
 
 const TAMANOS: Record<TextoPlan["tamano"], number> = { pequeno: 48, mediano: 68, grande: 96 };
 
 const Texto: React.FC<{ texto: TextoPlan; duracion: number }> = ({ texto, duracion }) => {
   const frame = useCurrentFrame();
+  const posicion = usePosicion(texto.posicion);
   const { fps, width } = useVideoConfig();
   const base = width / 1080;
   const muelle = spring({ frame, fps, config: { damping: texto.animacion === "rebote" ? 9 : 16, mass: 0.6 } });
@@ -229,7 +228,7 @@ const Texto: React.FC<{ texto: TextoPlan; duracion: number }> = ({ texto, duraci
         : "0 4px 18px rgba(0,0,0,0.55), 0 2px 3px rgba(0,0,0,0.7)";
 
   return (
-    <AbsoluteFill style={{ alignItems: "center", padding: `0 ${64 * base}px`, ...POSICION[texto.posicion] }}>
+    <AbsoluteFill style={posicion}>
       <div style={{ textAlign: "center", opacity: opacidad, transform, maxWidth: "100%" }}>
         <span
           style={{
@@ -269,6 +268,7 @@ const Subtitulos: React.FC<{ props: PropsEditor }> = ({ props }) => {
   const base = width / 1080;
   const { plan } = props;
   const { estilo, letra, colorResaltado, posicion } = plan.subtitulos;
+  const estiloPosicion = usePosicion(posicion);
 
   const paginas = useMemo(
     () =>
@@ -315,14 +315,7 @@ const Subtitulos: React.FC<{ props: PropsEditor }> = ({ props }) => {
           };
 
   return (
-    <AbsoluteFill
-      style={{
-        alignItems: "center",
-        padding: `0 ${70 * base}px`,
-        ...POSICION[posicion],
-        ...(posicion === "abajo" ? { paddingBottom: "19%" } : {}),
-      }}
-    >
+    <AbsoluteFill style={estiloPosicion}>
       <div style={{ textAlign: "center", lineHeight: 1.35 }}>
         <span style={{ ...LETRAS[letra], fontSize: tamano, ...estilos }}>
           {pagina.tokens.map((t) => {
@@ -465,8 +458,7 @@ export const EditorVideo: React.FC<PropsEditor> = (props) => {
         <Destellos efectos={plan.efectos} />
         {plan.subtitulos.activar || (voz && plan.vozEnOff.subtitulos) ? <Subtitulos props={props} /> : null}
         {plan.textos.map((t, i) => {
-          const inicio = Math.max(0, Math.round(t.inicio * FPS));
-          const fin = Math.min(total, Math.round(t.fin * FPS));
+          const { desde: inicio, hasta: fin } = ventanaTexto(plan, t, tramos, total);
           if (fin - inicio < 5) return null;
           return (
             <Sequence key={i} from={inicio} durationInFrames={fin - inicio}>

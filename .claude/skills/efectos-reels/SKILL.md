@@ -16,9 +16,11 @@ componente de Remotion e instrucciones de [scripts/claude.ts](../../../scripts/c
 
 | Tipo | Dónde | Valores |
 |---|---|---|
-| Transiciones (entrada de cada segmento) | `segmento.transicion` | corte, zoom, flash, deslizar, glitch, desenfoque, fundido_negro |
+| Transiciones (respecto al segmento anterior) | `segmento.transicion` | corte, fundido (solapa 0,4 s), fundido_negro — a propósito solo transiciones limpias: el usuario rechazó zoom/deslizar/glitch por artificiales |
 | Sonido al empezar un segmento | `segmento.sonidoEntrada` | cualquier clave de `SONIDOS` o `ninguno` |
-| Efectos visuales puntuales | `plan.efectos[]` | zoom_golpe, temblor, flash, congelar_brillo |
+| Efectos visuales puntuales | `plan.efectos[]` | zoom_golpe, temblor, flash, congelar_brillo (solo si se piden) |
+| Frase por clip | `texto.enTrozo` | texto anclado a un segmento; `ventanaTexto()` calcula cuándo se ve |
+| Zonas seguras | `zonaSegura()` en EditorVideo | arriba 14 %, abajo 24 %, derecha 15 % en vertical |
 | Sonidos sueltos | `plan.sonidos[]` | claves de `SONIDOS` |
 | Letras (estilos de texto de Instagram) | `texto.letra`, `subtitulos.letra` | clasica (Figtree), moderna (Bebas Neue), neon (Yellowtail + brillo), maquina (Courier Prime), fuerte (Anton), elegante (Playfair italic), comic (Bangers), manuscrita (Caveat) |
 | Fondo de texto (botón "A" de Instagram) | `texto.fondo` | ninguno, caja, caja_suave |

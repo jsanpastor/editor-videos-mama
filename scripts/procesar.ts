@@ -9,6 +9,7 @@ import { Readable } from "node:stream";
 import { pipeline as streamPipeline } from "node:stream/promises";
 import type { Plan } from "../src/plan";
 import { ejecutarPipeline, type Etapa } from "./pipeline";
+import type { Opciones } from "./claude";
 
 const evento = process.env.GITHUB_EVENT_PATH
   ? (JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, "utf8")) as {
@@ -30,6 +31,7 @@ type Trabajo = {
   archivos: { id: string; nombre: string }[];
   voz?: { id: string; nombre: string } | null;
   instrucciones: string;
+  opciones?: Opciones | null;
   version?: number;
 };
 
@@ -165,6 +167,7 @@ try {
   const { plan, duracion } = await ejecutarPipeline({
     originales,
     voz,
+    opciones: trabajo.opciones ?? null,
     instrucciones: trabajo.instrucciones,
     planAnterior: datos.planAnterior,
     salida,

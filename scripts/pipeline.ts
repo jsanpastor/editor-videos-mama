@@ -13,13 +13,14 @@ import {
 } from "../src/plan";
 import { audioParaWhisper, fotogramas, infoAudio, infoVideo, limpiarVoz, normalizar } from "./medios";
 import { transcribirWav, transcripcionLegible } from "./transcribir";
-import { pedirPlan, type VideoParaClaude } from "./claude";
+import { type Opciones, pedirPlan, type VideoParaClaude } from "./claude";
 
 export type Etapa = "preparando" | "escuchando" | "pensando" | "montando";
 
 export type OpcionesPipeline = {
   originales: { ruta: string; nombre: string }[];
   voz?: { ruta: string } | null; // voz en off grabada por ella
+  opciones?: Opciones | null; // casillas marcadas en la web
   instrucciones: string;
   planAnterior?: Plan | null;
   planFijo?: Plan | null; // para pruebas: saltarse a Claude
@@ -92,6 +93,7 @@ export const ejecutarPipeline = async (o: OpcionesPipeline) => {
       videos: paraClaude,
       voz: voz ? { duracion: voz.duracion, transcripcion: transcripcionLegible(voz.subtitulos) } : null,
       instrucciones: o.instrucciones,
+      opciones: o.opciones ?? null,
       planAnterior: o.planAnterior,
     }));
   const plan = aplicarQuitarSilencios(sanearPlan(planClaude, fuentes), subtitulos);
@@ -107,7 +109,9 @@ export const ejecutarPipeline = async (o: OpcionesPipeline) => {
       composition,
       serveUrl,
       codec: "h264",
-      crf: 20,
+      crf: 17,
+      // Cada fotograma se pasa al codificador casi sin comprimir (por defecto es 80)
+      jpegQuality: 95,
       concurrency,
       outputLocation: o.salida,
       inputProps: props,

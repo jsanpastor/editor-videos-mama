@@ -60,13 +60,18 @@
               <textarea
                 id="campo-instrucciones"
                 rows="4"
-                placeholder="Por ejemplo: quita los primeros segundos, pon subtítulos y un título que diga «Bizcocho de limón»"
+                placeholder="Por ejemplo: un reel de 20 segundos con los mejores momentos. El título: «Bizcocho de limón»"
               ></textarea>
               <button id="boton-dictar" class="boton boton-secundario" type="button" hidden>
                 🎤 Dictar
               </button>
-              <p class="pista">O toca una idea para añadirla:</p>
-              <div class="ideas" id="ideas"></div>
+              <fieldset class="opciones">
+                <legend class="pista">Marca lo que quieras añadir:</legend>
+                <label class="opcion"><input type="checkbox" id="op-titulo" /> <span>Un título al principio</span></label>
+                <label class="opcion"><input type="checkbox" id="op-frases" /> <span>Una frase en cada clip</span></label>
+                <label class="opcion"><input type="checkbox" id="op-subtitulos" checked /> <span>Subtítulos de lo que se habla</span></label>
+                <label class="opcion"><input type="checkbox" id="op-sonidos" /> <span>Efectos de sonido</span></label>
+              </fieldset>
             </div>
           </div>
 
@@ -156,8 +161,7 @@
         <div class="acciones"></div>
         <div class="cambios" hidden>
           <label>✏️ ¿Quieres cambiar algo?</label>
-          <textarea rows="3" placeholder="Por ejemplo: hazlo más corto, pon el título más grande y más efectos de sonido"></textarea>
-          <div class="ideas ideas-cambios"></div>
+          <textarea rows="3" placeholder="Por ejemplo: hazlo más corto y cambia la frase del segundo clip"></textarea>
           <button class="boton boton-principal" type="button">✨ Hacer los cambios</button>
         </div>
       </article>

@@ -52,10 +52,11 @@ export const normalizar = async (entrada: string, salida: string) => {
     "scale=w='min(1920,iw)':h='min(1920,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,fps=30,format=yuv420p",
     "-c:v",
     "libx264",
+    // Calidad casi sin pérdidas: es la imagen de la que parte todo el montaje
     "-preset",
-    "veryfast",
+    "fast",
     "-crf",
-    "18",
+    "15",
     "-c:a",
     "aac",
     "-b:a",

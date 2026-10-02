@@ -52,15 +52,13 @@ export const LETRAS = {
 export type Letra = keyof typeof LETRAS;
 const NOMBRES_LETRAS = Object.keys(LETRAS) as [Letra, ...Letra[]];
 
-export const TRANSICIONES = ["corte", "fundido", "zoom", "deslizar", "fundido_negro"] as const;
+export const TRANSICIONES = ["corte", "fundido", "fundido_negro"] as const;
 export type Transicion = (typeof TRANSICIONES)[number];
 // Frames que se solapan dos trozos en las transiciones suaves
-export const SOLAPE_FRAMES = 10;
+export const SOLAPE_FRAMES = 12;
 const SOLAPA: Record<Transicion, boolean> = {
   corte: false,
   fundido: true,
-  zoom: true,
-  deslizar: true,
   fundido_negro: false,
 };
 
@@ -74,7 +72,7 @@ const segmentoSchema = z.object({
   transicion: z
     .enum(TRANSICIONES)
     .describe(
-      "Cómo se pasa del trozo anterior a este (se ignora en el primero). corte: cambio seco (lo normal y lo más natural); fundido: los dos planos se mezclan suavemente; zoom: el plano anterior se acerca y se funde con este (suave); deslizar: este empuja al anterior hacia un lado; fundido_negro: pasa por negro (cambio de tema o final). Las transiciones distintas de corte y fundido_negro solapan los dos trozos 0,33 segundos",
+      "Cómo se pasa del trozo anterior a este (se ignora en el primero). corte: cambio seco (lo normal); fundido: los dos planos se mezclan suavemente durante 0,4 s (los dos trozos se solapan 0,4 s); fundido_negro: el anterior se oscurece y este aparece desde negro (para separar partes o cerrar)",
     ),
   sonidoEntrada: sonidoOpcional.describe(
     "Efecto de sonido al empezar este trozo. Normalmente 'ninguno': solo si ella pide efectos de sonido",
@@ -83,8 +81,13 @@ const segmentoSchema = z.object({
 
 const textoSchema = z.object({
   texto: z.string().describe("Texto a mostrar. Corto (máx. ~30 caracteres por línea). Se permiten emojis y saltos de línea"),
-  inicio: z.number().describe("Segundo del vídeo FINAL en que aparece"),
-  fin: z.number().describe("Segundo del vídeo FINAL en que desaparece"),
+  enTrozo: z
+    .number()
+    .describe(
+      "Índice del segmento (0, 1, 2...) durante el que se ve el texto entero: el programa calcula solo cuándo aparece y desaparece. Úsalo para las frases de cada clip. -1 = usar inicio/fin",
+    ),
+  inicio: z.number().describe("Segundo del vídeo FINAL en que aparece (solo si enTrozo es -1)"),
+  fin: z.number().describe("Segundo del vídeo FINAL en que desaparece (solo si enTrozo es -1)"),
   posicion: z.enum(["arriba", "centro", "abajo"]),
   letra: z.enum(NOMBRES_LETRAS),
   tamano: z.enum(["pequeno", "mediano", "grande"]),
@@ -174,7 +177,8 @@ export const planSchema = z.object({
 });
 
 export type Plan = z.infer<typeof planSchema>;
-export type Segmento = z.infer<typeof segmentoSchema>;
+// "origen" = índice del segmento tal como lo escribió Claude (se conserva al trocear por silencios)
+export type Segmento = z.infer<typeof segmentoSchema> & { origen?: number };
 export type TextoPlan = z.infer<typeof textoSchema>;
 export type EfectoPlan = z.infer<typeof efectoSchema>;
 
@@ -205,8 +209,8 @@ const limitar = (n: number, min: number, max: number) =>
 // Claude puede equivocarse con algún número: aquí se corrige todo lo que
 // haría fallar el render (trozos fuera de rango, velocidades absurdas...).
 export const sanearPlan = (plan: Plan, fuentes: Fuente[]): Plan => {
-  const segmentos = plan.segmentos
-    .map((s) => ({ ...s, video: Math.round(s.video) }))
+  const segmentos: Segmento[] = plan.segmentos
+    .map((s: Segmento, i) => ({ ...s, video: Math.round(s.video), origen: s.origen ?? i }))
     .filter((s) => s.video >= 0 && s.video < fuentes.length)
     .map((s) => {
       const dur = fuentes[s.video].duracion;
@@ -253,7 +257,7 @@ export const aplicarQuitarSilencios = (plan: Plan, subtitulos: Caption[][]): Pla
   const DESPUES = 0.15;
   const HUECO_MAX = 0.35;
   const segmentos: Segmento[] = [];
-  for (const s of plan.segmentos) {
+  for (const s of plan.segmentos as Segmento[]) {
     const palabras = (subtitulos[s.video] ?? []).filter(
       (c) => c.endMs / 1000 > s.inicio && c.startMs / 1000 < s.fin,
     );
@@ -277,6 +281,7 @@ export const aplicarQuitarSilencios = (plan: Plan, subtitulos: Caption[][]): Pla
           ...t,
           // Solo el primer tramo conserva la transición y el sonido elegidos
           transicion: i === 0 ? s.transicion : "corte",
+          origen: s.origen,
           sonidoEntrada: i === 0 ? s.sonidoEntrada : "ninguno",
         }),
       );
@@ -315,6 +320,22 @@ export const lineaDeTiempo = (plan: Plan): { tramos: Tramo[]; total: number } =>
 };
 
 export const duracionTotalFrames = (plan: Plan) => lineaDeTiempo(plan).total;
+
+// Frames [desde, hasta) en que se ve un texto: anclado a un trozo o con tiempos libres
+export const ventanaTexto = (plan: Plan, t: TextoPlan, tramos: Tramo[], total: number) => {
+  const indices = plan.segmentos
+    .map((s: Segmento, i) => ((s.origen ?? i) === t.enTrozo ? i : -1))
+    .filter((i) => i >= 0);
+  if (t.enTrozo >= 0 && indices.length) {
+    const primero = tramos[indices[0]];
+    const ultimo = tramos[indices[indices.length - 1]];
+    // Aparece cuando ya ha terminado la transición de entrada y se va antes de la de salida
+    const desde = primero.inicio + primero.solapeEntrada + 4;
+    const hasta = ultimo.inicio + ultimo.duracion - ultimo.solapeSalida - 2;
+    return { desde, hasta: Math.max(desde + 15, hasta) };
+  }
+  return { desde: Math.max(0, Math.round(t.inicio * FPS)), hasta: Math.min(total, Math.round(t.fin * FPS)) };
+};
 
 // Pasa los subtítulos (en tiempo del vídeo original) a la línea de tiempo
 // del vídeo final, teniendo en cuenta cortes y cambios de velocidad.
@@ -363,6 +384,7 @@ export const planPorDefecto: Plan = {
   textos: [
     {
       texto: "¡Hola! 👋",
+      enTrozo: 0,
       inicio: 0.3,
       fin: 2.8,
       posicion: "arriba",

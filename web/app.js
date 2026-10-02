@@ -3,33 +3,6 @@
 const URL_API = window.CONFIG && window.CONFIG.APPS_SCRIPT_URL;
 const MODO_DEMO = URL_API === "DEMO" || new URLSearchParams(location.search).has("demo");
 
-const IDEAS = [
-  "Haz un reel mezclando los clips",
-  "Es para una historia de Instagram",
-  "Que dure menos de 20 segundos",
-  "Pon subtítulos",
-  "Quita los silencios cuando hablo",
-  "Pon un título al principio con letra neón",
-  "Ritmo rápido y con energía",
-  "Con efectos de sonido",
-  "Ponle un filtro cálido",
-  "Pon «Sígueme para más» al final",
-];
-
-const IDEAS_CAMBIOS = [
-  "Más corto",
-  "Más rápido",
-  "Transiciones más suaves",
-  "Sin transiciones, solo cortes",
-  "Con efectos de sonido",
-  "Sin efectos de sonido",
-  "Letras más grandes",
-  "Cambia la letra",
-  "Quita los subtítulos",
-  "Cambia el orden de los clips",
-  "Otro filtro",
-];
-
 const ESTADOS = {
   en_cola: { icono: "⏳", texto: "En la cola, empieza enseguida" },
   preparando: { icono: "📦", texto: "Preparando el vídeo" },
@@ -258,15 +231,6 @@ $("campo-videos").addEventListener("change", (e) => {
   pintarElegidos();
 });
 
-for (const idea of IDEAS) {
-  const b = document.createElement("button");
-  b.type = "button";
-  b.className = "idea";
-  b.textContent = idea;
-  b.onclick = () => anadirTexto(idea);
-  $("ideas").append(b);
-}
-
 function anadirTexto(texto) {
   const campo = $("campo-instrucciones");
   const actual = campo.value.trim();
@@ -405,7 +369,13 @@ $("boton-editar").addEventListener("click", async () => {
       voz = { id: await subirADrive(vozArchivo, () => {}), nombre: vozArchivo.name };
     }
     $("subida-texto").textContent = "Enviando las instrucciones…";
-    await api("editar", { archivos, voz, instrucciones: $("campo-instrucciones").value });
+    const opciones = {
+      titulo: $("op-titulo").checked,
+      frasePorClip: $("op-frases").checked,
+      subtitulos: $("op-subtitulos").checked,
+      efectosSonido: $("op-sonidos").checked,
+    };
+    await api("editar", { archivos, voz, opciones, instrucciones: $("campo-instrucciones").value });
     elegidos = [];
     vozArchivo = null;
     mostrarVoz();
@@ -560,17 +530,6 @@ function crearTarjeta(t) {
     const cambios = nodo.querySelector(".cambios");
     cambios.hidden = false;
     const areaCambios = cambios.querySelector("textarea");
-    for (const idea of IDEAS_CAMBIOS) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "idea";
-      b.textContent = idea;
-      b.onclick = () => {
-        const actual = areaCambios.value.trim();
-        areaCambios.value = actual ? `${actual.replace(/[.,]$/, "")}. ${idea}` : idea;
-      };
-      cambios.querySelector(".ideas-cambios").append(b);
-    }
     cambios.querySelector(".boton").onclick = async (e) => {
       const texto = areaCambios.value.trim();
       if (!texto) return areaCambios.focus();

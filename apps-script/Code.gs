@@ -100,6 +100,16 @@ var ACCIONES = {
       }),
       voz: d.voz && d.voz.id ? { id: String(d.voz.id), nombre: String(d.voz.nombre || 'voz').slice(0, 80) } : null,
       instrucciones: String(d.instrucciones || '').slice(0, 3000),
+      opciones: d.opciones
+        ? {
+            titulo: !!d.opciones.titulo,
+            frasePorClip: !!d.opciones.frasePorClip,
+            subtitulos: !!d.opciones.subtitulos,
+            efectosSonido: !!d.opciones.efectosSonido,
+          }
+        : anterior && anterior.opciones
+          ? anterior.opciones
+          : null,
       basadoEn: anterior ? anterior.id : null,
       version: anterior ? (anterior.version || 1) + 1 : 1,
       estado: 'en_cola',
