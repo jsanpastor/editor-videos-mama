@@ -49,7 +49,11 @@ const appsScript = async <T>(accion: string, datos: object): Promise<T> => {
       await new Promise((res) => setTimeout(res, 2000 * intento));
       continue;
     }
-    const json = JSON.parse(texto) as { ok: boolean; error?: string } & T;
+    const json = JSON.parse(texto) as { ok: boolean; error?: string; reintentar?: boolean } & T;
+    if (json.reintentar && intento < 4) {
+      await new Promise((res) => setTimeout(res, 2000 * intento));
+      continue;
+    }
     if (!json.ok) throw new Error(`Apps Script (${accion}): ${json.error}`);
     return json;
   }

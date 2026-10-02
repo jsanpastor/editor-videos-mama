@@ -71,6 +71,7 @@ export const ejecutarPipeline = async (o: OpcionesPipeline) => {
   const subtitulos: Caption[][] = fuentes.map(() => []);
   if (o.transcribir !== false) {
     await avisar("escuchando");
+    try {
     for (const [i, v] of paraClaude.entries()) {
       if (!v.tieneAudio) continue;
       const wav = path.join(o.carpetaTrabajo, `audio-${i}.wav`);
@@ -82,6 +83,10 @@ export const ejecutarPipeline = async (o: OpcionesPipeline) => {
       const wav = path.join(o.carpetaTrabajo, "audio-voz.wav");
       await audioParaWhisper(path.join(carpetaPublica, "voz.wav"), wav);
       voz.subtitulos = await transcribirWav(wav);
+    }
+    } catch (e) {
+      // Sin transcripción el vídeo sale igual, solo que sin subtítulos
+      console.warn("No se pudo transcribir:", (e as Error).message.slice(0, 200));
     }
   }
 

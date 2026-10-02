@@ -35,8 +35,10 @@ function configurar() {
 // ---------------------------------------------------------------------------
 // API
 // ---------------------------------------------------------------------------
+// Si una petición llega como GET es que Google la ha redirigido mal: doPost no
+// se ha ejecutado, así que quien llama puede repetirla sin miedo a duplicar nada.
 function doGet() {
-  return json_({ ok: true, app: 'editor-videos-mama' });
+  return json_({ ok: false, reintentar: true, error: 'La petición llegó por GET', app: 'editor-videos-mama' });
 }
 
 function doPost(e) {

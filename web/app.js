@@ -59,10 +59,12 @@ if (deEnlace) {
 // ---------------------------------------------------------------------------
 async function api(accion, datos = {}) {
   if (MODO_DEMO) return demo(accion, datos);
-  // Solo se reintentan las consultas: repetir "editar" podría duplicar un vídeo
-  const intentos = ["trabajos", "token", "hola"].includes(accion) ? 3 : 1;
-  let json = null;
-  for (let i = 1; i <= intentos && !json; i++) {
+  // Las consultas se pueden repetir sin problema. "editar" solo se repite cuando
+  // Google avisa de que la petición no llegó a ejecutarse (reintentar), para no
+  // duplicar un vídeo.
+  const sePuedeRepetir = ["trabajos", "token", "hola"].includes(accion);
+  for (let intento = 1; ; intento++) {
+    const ultimo = intento >= 3;
     let r;
     try {
       r = await fetch(URL_API, {
@@ -70,19 +72,26 @@ async function api(accion, datos = {}) {
         body: JSON.stringify({ accion, clave, ...datos }),
       });
     } catch {
-      if (i === intentos) throw new Error("No hay conexión a internet. Inténtalo otra vez en un momento.");
+      if (ultimo || !sePuedeRepetir) throw new Error("No hay conexión a internet. Inténtalo otra vez en un momento.");
+      await esperar(1500 * intento);
       continue;
     }
+    let json;
     try {
       json = await r.json();
     } catch {
       // Google a veces devuelve una página de error en vez de la respuesta
-      if (i === intentos) throw new Error("Google no responde ahora mismo. Inténtalo otra vez en un minuto.");
-      await esperar(1500 * i);
+      if (ultimo || !sePuedeRepetir) throw new Error("Google no responde ahora mismo. Inténtalo otra vez en un minuto.");
+      await esperar(1500 * intento);
+      continue;
     }
+    if (json.reintentar && !ultimo) {
+      await esperar(1500 * intento);
+      continue;
+    }
+    if (!json.ok) throw new Error(json.reintentar ? "Google no responde ahora mismo. Inténtalo otra vez en un minuto." : json.error || "Error desconocido");
+    return json;
   }
-  if (!json.ok) throw new Error(json.error || "Error desconocido");
-  return json;
 }
 
 let tokenCache = null;

@@ -41,11 +41,17 @@ jobs:
           done
           exit 1
 
+      # whisper.cpp se compila para el procesador concreto: la caché va por modelo de
+      # CPU, si no un binario compilado en otra máquina falla con SIGILL
+      - name: Modelo de procesador
+        id: cpu
+        run: echo "hash=$(grep -m1 'model name' /proc/cpuinfo | md5sum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
       - name: Caché de whisper (transcripción)
         uses: actions/cache@v4
         with:
           path: .whisper
-          key: whisper-1.7.6-small-${{ runner.os }}
+          key: whisper-1.7.6-small-${{ runner.os }}-${{ steps.cpu.outputs.hash }}
 
       - run: npm ci
 
